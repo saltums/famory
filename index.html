@@ -324,6 +324,7 @@
         <div id="lb-stage" class="flex-1 flex items-center justify-center relative" style="height: calc(100vh - 140px);">
             <button onclick="lbPrev()" class="absolute left-2 z-10 text-white text-4xl px-3 py-6 bg-black/20 rounded-full select-none">‹</button>
             <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain select-none" draggable="false">
+            <video id="lb-video" class="max-w-full max-h-full" controls playsinline style="display:none;max-height:calc(100vh - 140px)"></video>
             <button onclick="lbNext()" class="absolute right-2 z-10 text-white text-4xl px-3 py-6 bg-black/20 rounded-full select-none">›</button>
         </div>
         <div class="px-4 pb-4 pt-2">
@@ -848,31 +849,42 @@
             return json.metadata;
         }
 
-        function collectImages(node) {
-            const ext = /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i;
-            const direct = (node.contents || []).filter(f => !f.isfolder && ext.test(f.name));
-            if (direct.length) return direct;
+        function collectMedia(node) {
+            const imgExt = /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i;
+            const vidExt = /\.(mp4|mov|avi|m4v|webm|3gp|mkv)$/i;
+            const direct = (node.contents || []).filter(f => !f.isfolder && (imgExt.test(f.name) || vidExt.test(f.name)));
+            if (direct.length) return direct.map(f => ({ ...f, isVideo: vidExt.test(f.name) }));
             const sub = [];
             for (const c of (node.contents || [])) {
-                if (c.isfolder) sub.push(...collectImages(c));
+                if (c.isfolder) sub.push(...collectMedia(c));
             }
             return sub;
+        }
+
+        async function getVideoUrl(code, fileid) {
+            try {
+                const res = await fetch(`https://api.pcloud.com/getpublinkdownload?code=${code}&fileid=${fileid}`);
+                const data = await res.json();
+                if (data.result !== 0 || !data.hosts || !data.path) return null;
+                return `https://${data.hosts[0]}${data.path}`;
+            } catch(e) { return null; }
         }
 
         async function loadEventPhotos(code, container, title) {
             container.innerHTML = '<span class="pcloud-loading">読み込み中…</span>';
             try {
                 const tree = await getPCloudTree(code);
-                const imgs = collectImages(tree);
+                const imgs = collectMedia(tree);
                 if (!imgs.length) {
                     container.innerHTML = '<span class="pcloud-loading">写真なし</span>';
                     return;
                 }
-                container.innerHTML = imgs.map(f =>
-                    `<img src="${thumbUrl(code, f.fileid, '160x160')}" class="pcloud-photo" data-fid="${f.fileid}" loading="lazy">`
-                ).join('');
-                container.querySelectorAll('.pcloud-photo').forEach((img, i) => {
-                    img.addEventListener('click', () => {
+                container.innerHTML = imgs.map(f => {
+                    if (f.isVideo) return `<div class="pcloud-photo bg-slate-100 flex items-center justify-center text-2xl cursor-pointer" data-fid="${f.fileid}">▶️</div>`;
+                    return `<img src="${thumbUrl(code, f.fileid, '160x160')}" class="pcloud-photo" data-fid="${f.fileid}" loading="lazy">`;
+                }).join('');
+                container.querySelectorAll('.pcloud-photo').forEach((el, i) => {
+                    el.addEventListener('click', () => {
                         lbPhotos = imgs;
                         lbCode = code;
                         lbIndex = i;
@@ -943,7 +955,7 @@
             if (!code) { photosData[id] = { photos: [], code: '' }; applyAlbumThumb(id); return; }
             try {
                 const tree = await getPCloudTree(code);
-                const imgs = collectImages(tree);
+                const imgs = collectMedia(tree);
                 photosData[id] = { photos: imgs, code };
             } catch(err) {
                 photosData[id] = { photos: [], code: '' };
@@ -956,7 +968,12 @@
             if (!el) return;
             const data = photosData[eventId];
             if (!data || !data.code || !data.photos || data.photos.length === 0) return;
-            const ps = data.photos.slice(0, 4);
+            const imgOnly = data.photos.filter(p => !p.isVideo);
+            if (!imgOnly.length) {
+                el.innerHTML = `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-4xl">🎬</div>`;
+                return;
+            }
+            const ps = imgOnly.slice(0, 4);
             if (ps.length >= 4) {
                 el.innerHTML = `<div class="thumb-grid">${ps.map(p => `<img src="${thumbUrl(data.code, p.fileid, '300x300')}" onerror="this.style.visibility='hidden'">`).join('')}</div>`;
             } else {
@@ -980,16 +997,22 @@
 
             try {
                 const tree = await getPCloudTree(code);
-                const imgs = collectImages(tree);
+                const imgs = collectMedia(tree);
                 if (!imgs.length) {
-                    grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">写真がありません</div>';
+                    grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">写真・動画がありません</div>';
                     return;
                 }
-                grid.innerHTML = imgs.map((f, i) =>
-                    `<img src="${thumbUrl(code, f.fileid, '300x300')}" class="w-full aspect-square object-cover rounded-xl cursor-pointer active:opacity-70 transition-opacity" data-idx="${i}" loading="lazy">`
-                ).join('');
-                grid.querySelectorAll('img').forEach((img, i) => {
-                    img.addEventListener('click', () => {
+                grid.innerHTML = imgs.map((f, i) => {
+                    if (f.isVideo) {
+                        return `<div class="w-full aspect-square bg-slate-100 rounded-xl flex flex-col items-center justify-center cursor-pointer active:opacity-70 gap-1" data-idx="${i}">
+                            <span class="text-3xl">▶️</span>
+                            <span class="text-xs text-slate-500 truncate w-full text-center px-1">${f.name}</span>
+                        </div>`;
+                    }
+                    return `<img src="${thumbUrl(code, f.fileid, '300x300')}" class="w-full aspect-square object-cover rounded-xl cursor-pointer active:opacity-70 transition-opacity" data-idx="${i}" loading="lazy">`;
+                }).join('');
+                grid.querySelectorAll('[data-idx]').forEach((el, i) => {
+                    el.addEventListener('click', () => {
                         lbPhotos = imgs;
                         lbCode = code;
                         lbIndex = i;
@@ -1027,9 +1050,23 @@
             renderStrip();
         }
 
-        function updateLb() {
+        async function updateLb() {
             const p = lbPhotos[lbIndex];
-            document.getElementById('lb-img').src = thumbUrl(lbCode, p.fileid, '1920x1920');
+            const img = document.getElementById('lb-img');
+            const vid = document.getElementById('lb-video');
+            if (p.isVideo) {
+                img.style.display = 'none';
+                vid.style.display = 'block';
+                vid.src = '';
+                const url = await getVideoUrl(lbCode, p.fileid);
+                if (url) vid.src = url;
+            } else {
+                vid.pause();
+                vid.src = '';
+                vid.style.display = 'none';
+                img.style.display = 'block';
+                img.src = thumbUrl(lbCode, p.fileid, '1920x1920');
+            }
             document.getElementById('lb-counter').textContent = `${lbIndex + 1} / ${lbPhotos.length}`;
             document.querySelectorAll('.lb-s').forEach((s, i) => {
                 s.style.opacity = i === lbIndex ? '1' : '0.45';
@@ -1039,9 +1076,12 @@
         }
 
         function renderStrip() {
-            document.getElementById('lb-strip').innerHTML = lbPhotos.map((p, i) =>
-                `<img src="${thumbUrl(lbCode, p.fileid, '120x120')}" class="lb-s flex-shrink-0 h-14 w-14 object-cover rounded-lg cursor-pointer" style="opacity:${i===0?'1':'0.45'}" onclick="lbJump(${i})">`
-            ).join('');
+            document.getElementById('lb-strip').innerHTML = lbPhotos.map((p, i) => {
+                if (p.isVideo) {
+                    return `<div class="lb-s flex-shrink-0 h-14 w-14 bg-slate-700 rounded-lg cursor-pointer flex items-center justify-center text-white text-xl" style="opacity:${i===0?'1':'0.45'}" onclick="lbJump(${i})">▶</div>`;
+                }
+                return `<img src="${thumbUrl(lbCode, p.fileid, '120x120')}" class="lb-s flex-shrink-0 h-14 w-14 object-cover rounded-lg cursor-pointer" style="opacity:${i===0?'1':'0.45'}" onclick="lbJump(${i})">`;
+            }).join('');
         }
 
         function lbJump(i) { lbIndex = i; updateLb(); }
@@ -1049,6 +1089,9 @@
         function lbNext() { if (lbIndex < lbPhotos.length - 1) { lbIndex++; updateLb(); } }
         function closeLightbox() {
             document.getElementById('lightbox').classList.remove('lb-open');
+            const vid = document.getElementById('lb-video');
+            vid.pause();
+            vid.src = '';
             lbPhotos = [];
         }
 
