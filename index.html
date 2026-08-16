@@ -1015,10 +1015,17 @@
                     el.addEventListener('click', async () => {
                         const item = imgs[i];
                         if (item.isVideo) {
+                            // ポップアップブロック回避：先に空タブを開いてからURLを設定
+                            const win = window.open('', '_blank');
                             el.style.opacity = '0.5';
                             const url = await getVideoUrl(code, item.fileid);
                             el.style.opacity = '';
-                            if (url) window.open(url, '_blank');
+                            if (url && win) {
+                                win.location.href = url;
+                            } else {
+                                if (win) win.close();
+                                window.open(ev.pCloudURL, '_blank'); // fallback
+                            }
                             return;
                         }
                         lbPhotos = imgs;
@@ -1096,8 +1103,13 @@
         }
 
         async function openVideoNewTab(code, fileid) {
+            const win = window.open('', '_blank');
             const url = await getVideoUrl(code, fileid);
-            if (url) window.open(url, '_blank');
+            if (url && win) {
+                win.location.href = url;
+            } else {
+                if (win) win.close();
+            }
         }
 
         function renderStrip() {
