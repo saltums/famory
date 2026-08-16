@@ -905,8 +905,8 @@
         const photosData = {};
         let lbPhotos = [], lbCode = '', lbIndex = 0, lbTitle = '';
 
-        function thumbUrl(code, fileid, size) {
-            return `https://api.pcloud.com/getpubthumb?code=${code}&fileid=${fileid}&size=${size}&crop=1&type=jpg`;
+        function thumbUrl(code, fileid, size, crop = 1) {
+            return `https://api.pcloud.com/getpubthumb?code=${code}&fileid=${fileid}&size=${size}&crop=${crop}&type=jpg`;
         }
 
         async function renderPhotos() {
@@ -1085,7 +1085,7 @@
                 vid.src = '';
                 vid.style.display = 'none';
                 img.style.display = 'block';
-                img.src = thumbUrl(lbCode, p.fileid, '1920x1920');
+                img.src = thumbUrl(lbCode, p.fileid, '1920x1920', 0);
             }
             document.getElementById('lb-counter').textContent = `${lbIndex + 1} / ${lbPhotos.length}`;
             document.querySelectorAll('.lb-s').forEach((s, i) => {
