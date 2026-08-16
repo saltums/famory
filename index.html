@@ -303,6 +303,17 @@
         </div>
     </div>
 
+    <!-- Photo Popup (bottom sheet) -->
+    <div id="photo-popup" class="hidden fixed inset-0 z-[200] bg-black/60 items-end justify-center">
+        <div class="bg-white rounded-t-3xl w-full max-w-lg" style="max-height:85vh;display:flex;flex-direction:column;">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+                <span id="photo-popup-title" class="font-bold text-slate-800 text-lg truncate max-w-[240px]"></span>
+                <button onclick="closePhotoPopup()" class="text-slate-400 text-2xl leading-none p-1">✕</button>
+            </div>
+            <div id="photo-popup-grid" class="p-3 grid grid-cols-3 gap-2 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <!-- Lightbox -->
     <div id="lightbox" class="fixed inset-0 bg-black z-[300]">
         <div class="flex items-center justify-between px-4 pt-safe pt-4 pb-2">
@@ -621,10 +632,13 @@
                         </div>
                         <h3 class="text-2xl font-bold text-slate-800">${e.タイトル}</h3>
                         ${e.詳細 ? `<p class="text-slate-600 leading-relaxed whitespace-pre-wrap">${e.詳細}</p>` : ''}
-                        
-                        ${e.pCloudURL ? `<div id="evphotos-${e.ID}" class="pcloud-photos"><span class="pcloud-loading">読み込み中…</span></div>` : ''}
 
                         <div class="flex flex-wrap gap-3 pt-2">
+                             ${e.pCloudURL ? `
+                                <button onclick="openPhotoPopup('${e.ID}')" class="btn-premium px-4 py-2.5 flex items-center gap-2 text-sm font-bold text-slate-600">
+                                    <span>🖼</span> 写真を見る
+                                </button>
+                             ` : ''}
                              ${e.場所 ? `
                                 <button onclick="openMap('${e.場所}')" class="btn-premium px-4 py-2.5 flex items-center gap-2 text-sm font-bold text-slate-600">
                                     <span class="text-blue-500">🗺</span> ${e.場所}
@@ -649,13 +663,6 @@
                 `;
             });
 
-            // カード描画後に写真を並列ロード
-            displayList.filter(e => e.pCloudURL).forEach(e => {
-                const code = extractPCloudCode(e.pCloudURL);
-                if (!code) return;
-                const el = document.getElementById(`evphotos-${e.ID}`);
-                if (el) loadEventPhotos(code, el, e.タイトル || '');
-            });
         }
 
         function openMap(loc) {
@@ -955,6 +962,54 @@
             } else {
                 el.innerHTML = `<img src="${thumbUrl(data.code, ps[0].fileid, '400x400')}" onerror="this.style.visibility='hidden'">`;
             }
+        }
+
+        async function openPhotoPopup(eventId) {
+            const ev = allEvents.find(e => String(e.ID) === String(eventId));
+            if (!ev || !ev.pCloudURL) return;
+            const code = extractPCloudCode(ev.pCloudURL);
+            if (!code) return;
+
+            document.getElementById('photo-popup-title').textContent = ev.タイトル || '';
+            const grid = document.getElementById('photo-popup-grid');
+            grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">読み込み中…</div>';
+
+            const popup = document.getElementById('photo-popup');
+            popup.classList.remove('hidden');
+            popup.classList.add('flex');
+
+            try {
+                const tree = await getPCloudTree(code);
+                const imgs = collectImages(tree);
+                if (!imgs.length) {
+                    grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">写真がありません</div>';
+                    return;
+                }
+                grid.innerHTML = imgs.map((f, i) =>
+                    `<img src="${thumbUrl(code, f.fileid, '300x300')}" class="w-full aspect-square object-cover rounded-xl cursor-pointer active:opacity-70 transition-opacity" data-idx="${i}" loading="lazy">`
+                ).join('');
+                grid.querySelectorAll('img').forEach((img, i) => {
+                    img.addEventListener('click', () => {
+                        lbPhotos = imgs;
+                        lbCode = code;
+                        lbIndex = i;
+                        lbTitle = ev.タイトル || '';
+                        const lb = document.getElementById('lightbox');
+                        lb.classList.add('lb-open');
+                        document.getElementById('lb-title').textContent = lbTitle;
+                        updateLb();
+                        renderStrip();
+                    });
+                });
+            } catch(err) {
+                grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">読み込み失敗</div>';
+            }
+        }
+
+        function closePhotoPopup() {
+            const popup = document.getElementById('photo-popup');
+            popup.classList.add('hidden');
+            popup.classList.remove('flex');
         }
 
         function openAlbum(eventId, title) {
