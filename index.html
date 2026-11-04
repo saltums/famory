@@ -97,6 +97,8 @@
         .cal-cell { height: max(52px, calc((100dvh - 250px) / 6)); background-size: cover; background-position: center; }
         .cal-cell.has-photo { color: white; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
         .cal-cell.has-photo::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,0) 55%); border-radius: inherit; }
+        .new-badge { position: absolute; left: 8px; top: 8px; background: #f43f5e; color: white; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; letter-spacing: .03em; }
+        .tab-badge { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: #f43f5e; color: white; font-size: 12px; line-height: 20px; vertical-align: middle; }
         /* Quick picks */
         #quick-picks { scrollbar-width: none; }
         #quick-picks::-webkit-scrollbar { display: none; }
@@ -148,10 +150,12 @@
     <!-- Nav Tabs -->
     <nav class="bg-white border-b sticky top-[64px] sm:top-[72px] z-40">
         <div class="max-w-4xl mx-auto flex">
+            <button id="tab-recent" onclick="switchView('recent')"
+                class="flex-1 py-3 text-base sm:text-lg font-bold text-center text-slate-400">✨ さいきん<span id="new-count" class="tab-badge" style="display:none"></span></button>
             <button id="tab-album" onclick="switchView('album')"
-                class="flex-1 py-3 text-lg font-bold text-center tab-active">📷 アルバム</button>
+                class="flex-1 py-3 text-base sm:text-lg font-bold text-center tab-active">📷 アルバム</button>
             <button id="tab-calendar" onclick="switchView('calendar')"
-                class="flex-1 py-3 text-lg font-bold text-center text-slate-400">📅 カレンダー</button>
+                class="flex-1 py-3 text-base sm:text-lg font-bold text-center text-slate-400">📅 カレンダー</button>
         </div>
     </nav>
 
@@ -165,6 +169,11 @@
 
         <!-- Filter chip (日付・検索で絞り込み中) -->
         <div id="filter-chip" class="hidden mb-4"></div>
+
+        <!-- Recent View (新しく増えた写真) -->
+        <div id="view-recent" class="hidden">
+            <div id="recent-container" class="space-y-5"></div>
+        </div>
 
         <!-- Album View -->
         <div id="view-album">
@@ -256,6 +265,32 @@
         </div>
     </div>
 
+    <!-- Upload Sheet (アプリ内で写真を送る) -->
+    <div id="upload-sheet" class="hidden fixed inset-0 z-[160] bg-black/50 items-end sm:items-center justify-center">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-4 text-center">
+            <p id="up-title" class="font-bold text-slate-700 truncate"></p>
+            <div id="up-pick" class="space-y-2">
+                <label class="block w-full py-8 rounded-3xl brand-gradient text-white font-bold text-2xl cursor-pointer shadow-lg active:scale-95 transition-transform">
+                    📸 写真・動画をえらぶ
+                    <input id="up-input" type="file" accept="image/*,video/*" multiple class="hidden" onchange="startUpload(this.files)">
+                </label>
+                <p class="text-sm text-slate-400">何枚でもまとめて選べます</p>
+            </div>
+            <div id="up-progress" class="hidden space-y-3 py-4">
+                <p id="up-status" class="font-bold text-lg text-slate-700"></p>
+                <div class="h-4 bg-slate-100 rounded-full overflow-hidden"><div id="up-bar" class="h-full brand-gradient transition-all" style="width:0"></div></div>
+                <p class="text-xs text-slate-400">送り終わるまで画面を閉じないでね</p>
+            </div>
+            <div id="up-done" class="hidden space-y-3 py-2">
+                <div class="text-6xl">🎉</div>
+                <p id="up-done-msg" class="font-bold text-xl text-slate-700"></p>
+                <button onclick="closeUploader(true)" class="w-full p-4 rounded-2xl bg-slate-900 text-white font-bold text-lg">写真を見る</button>
+            </div>
+            <button id="up-close" onclick="closeUploader()" class="w-full p-3 text-slate-400 font-bold">閉じる</button>
+            <a id="up-fallback" href="#" target="_blank" class="block text-xs text-slate-300 underline">うまくいかないときはこちら（pCloudの画面）</a>
+        </div>
+    </div>
+
     <!-- Action Sheet (管理者メニュー) -->
     <div id="action-sheet" class="hidden fixed inset-0 z-[150] bg-black/50 items-end sm:items-center justify-center" onclick="if(event.target===this)closeActions()">
         <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-3">
@@ -275,10 +310,10 @@
                 class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto text-4xl">
                 ✓</div>
             <h2 class="text-2xl font-bold text-slate-800">思い出を保存しました！</h2>
-            <p class="text-slate-500">写真を投稿（アップロード）するための専用ページが用意できました。</p>
+            <p class="text-slate-500">続けて写真・動画を追加できます。</p>
             <div class="space-y-3">
-                <a id="success-upload-link" href="#" target="_blank" onclick="setTimeout(closeSuccessModal, 1000)"
-                    class="block w-full p-4 brand-gradient text-white rounded-2xl font-bold shadow-lg shadow-blue-200">今すぐ写真を投稿する</a>
+                <button id="success-upload-link" onclick="closeSuccessModal(true)"
+                    class="block w-full p-4 brand-gradient text-white rounded-2xl font-bold shadow-lg shadow-blue-200">📸 今すぐ写真を追加する</button>
                 <button onclick="closeSuccessModal()"
                     class="block w-full p-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">一旦閉じる（あとで投稿）</button>
             </div>
@@ -429,7 +464,12 @@
         const IS_ADMIN = ROLE === 'admin';
 
         let allEvents = [];
-        let currentView = 'album';
+        let currentView = IS_ADMIN ? 'album' : 'recent';   // 祖父母は「さいきん」から
+        // 前回アプリを閉じた時刻（これより後に追加された写真が NEW）
+        const PREV_SEEN = Number(store('famory_seen')) || Date.now();
+        const markSeen = () => store('famory_seen', String(Date.now()));
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') markSeen(); });
+        window.addEventListener('pagehide', markSeen);
         let currentMonth = new Date();
         let dayFilter = null;   // 'YYYY-MM-DD'
         let searchQ = '';
@@ -477,11 +517,17 @@
             const dateParam = params.get('date');
             if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
                 dayFilter = dateParam;
+                currentView = 'album';
                 const [y, m] = dateParam.split('-').map(Number);
                 currentMonth = new Date(y, m - 1, 1);
             }
             setupSwipe();
-            loadData();
+            switchView(currentView);
+            loadData().then(() => {
+                // LINEの「写真を送る」リンク: そのまま送信画面を開く
+                const up = params.get('up');
+                if (up && evById(up)) openUploader(up);
+            });
         };
 
         async function loadData() {
@@ -505,9 +551,8 @@
         // ===== 画面切り替え =====
         function switchView(view) {
             currentView = view;
-            document.getElementById('view-album').classList.toggle('hidden', view !== 'album');
-            document.getElementById('view-calendar').classList.toggle('hidden', view !== 'calendar');
-            ['album', 'calendar'].forEach(v => {
+            ['recent', 'album', 'calendar'].forEach(v => document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view));
+            ['recent', 'album', 'calendar'].forEach(v => {
                 const tab = document.getElementById(`tab-${v}`);
                 tab.classList.toggle('tab-active', v === view);
                 tab.classList.toggle('text-slate-400', v !== view);
@@ -518,7 +563,8 @@
 
         function render() {
             renderFilterChip();
-            if (currentView === 'album') renderAlbum();
+            if (currentView === 'recent') renderRecent();
+            else if (currentView === 'album') renderAlbum();
             else renderCalendar();
         }
 
@@ -527,7 +573,7 @@
             searchQ = '';
             document.getElementById('search-input').value = '';
             document.getElementById('search-area').classList.add('hidden');
-            switchView('album');
+            switchView(IS_ADMIN ? 'album' : 'recent');
         }
 
         // ===== 絞り込み（日付・検索） =====
@@ -641,7 +687,67 @@
             if (!imgs.length) inner = `<span class="text-5xl">🎬</span>`;
             else if (imgs.length >= 4) inner = `<div class="thumb-grid">${imgs.slice(0, 4).map(p => `<img src="${thumbUrl(data.code, p.fileid, '300x300')}" loading="lazy" onerror="this.style.visibility='hidden'">`).join('')}</div>`;
             else inner = `<img src="${thumbUrl(data.code, imgs[0].fileid, '600x450')}" loading="lazy" onerror="this.style.visibility='hidden'">`;
-            el.innerHTML = inner + `<span class="count-badge">${n}件</span>`;
+            const nNew = newCountOf(id);
+            el.innerHTML = inner + `<span class="count-badge">${n}件</span>` + (nNew ? `<span class="new-badge">NEW ${nNew}</span>` : '');
+            updateNewBadge();
+        }
+
+        // ===== NEW（前回以降に増えた写真） =====
+        function photoTime(p) { return Date.parse(p.created || p.modified || '') || 0; }
+        function newCountOf(id) {
+            const d = photosData[id];
+            return d ? d.photos.filter(p => photoTime(p) > PREV_SEEN).length : 0;
+        }
+        function updateNewBadge() {
+            const total = Object.keys(photosData).reduce((n, id) => n + newCountOf(id), 0);
+            const b = document.getElementById('new-count');
+            b.textContent = total;
+            b.style.display = total ? 'inline-block' : 'none';
+        }
+
+        // ===== さいきん（写真が新しく増えた順） =====
+        async function renderRecent() {
+            const container = document.getElementById('recent-container');
+            const targets = allEvents.filter(e => e.pCloudURL);
+            if (!targets.length) { container.innerHTML = '<div class="text-center py-20 text-slate-400">まだ写真がありません</div>'; return; }
+            if (!targets.every(e => photosData[e.ID])) {
+                container.innerHTML = '<div class="text-center py-20 text-slate-400">写真を読み込んでいます…</div>';
+                for (let i = 0; i < targets.length; i += 6) await Promise.all(targets.slice(i, i + 6).map(loadAlbumData));
+                if (currentView !== 'recent') return;
+            }
+            updateNewBadge();
+            const latest = e => Math.max(0, ...photosData[e.ID].photos.map(photoTime));
+            const list = targets.filter(e => photosData[e.ID] && photosData[e.ID].photos.length)
+                .sort((a, b) => latest(b) - latest(a) || b.日付.localeCompare(a.日付))
+                .slice(0, 8);
+            const totalNew = list.reduce((n, e) => n + newCountOf(e.ID), 0);
+            const MAX = 8;
+            container.innerHTML = (totalNew ? `<div class="bg-rose-50 text-rose-500 font-bold rounded-2xl px-4 py-3 text-center">✨ 前回から新しい写真が ${totalNew}件 増えました</div>` : '') +
+                list.map(e => {
+                    const id = esc(e.ID);
+                    const d = photosData[e.ID];
+                    // 新しい順に並べる（ビューアでは元の順番の位置で開く）
+                    const items = d.photos.map((p, i) => ({ p, i })).sort((a, b) => photoTime(b.p) - photoTime(a.p));
+                    const nNew = newCountOf(e.ID);
+                    const thumbs = items.slice(0, MAX).map(({ p, i }, k) => {
+                        const more = (k === MAX - 1 && items.length > MAX) ? `<span class="absolute inset-0 bg-black/50 text-white text-xl font-bold flex items-center justify-center">+${items.length - MAX + 1}</span>` : '';
+                        const isNew = photoTime(p) > PREV_SEEN ? '<span class="absolute top-1 left-1 w-3 h-3 rounded-full bg-rose-500 border-2 border-white"></span>' : '';
+                        const media = p.isVideo
+                            ? `<img src="${thumbUrl(d.code, p.fileid, '300x300')}" loading="lazy" onerror="this.style.visibility='hidden'"><span class="absolute inset-0 flex items-center justify-center text-white text-3xl drop-shadow">▶</span>`
+                            : `<img src="${thumbUrl(d.code, p.fileid, '300x300')}" loading="lazy" onerror="this.style.visibility='hidden'">`;
+                        return `<button onclick="openViewer('${id}', ${i})" class="cover relative aspect-square rounded-xl bg-slate-100">${media}${isNew}${more}</button>`;
+                    }).join('');
+                    return `<section class="glass-card p-4">
+                        <div class="flex items-start justify-between gap-2 mb-3">
+                            <div class="min-w-0">
+                                <p class="text-sm font-bold text-slate-400">${fmtDate(e.日付)}</p>
+                                <h3 class="text-xl font-bold text-slate-800 truncate">${esc(e.タイトル)} ${nNew ? `<span class="align-middle text-xs bg-rose-500 text-white rounded-full px-2 py-0.5">NEW ${nNew}</span>` : ''}</h3>
+                            </div>
+                            ${(e.pCloudUploadURL || IS_ADMIN) ? `<button onclick="addPhotos('${id}')" class="flex-shrink-0 brand-gradient text-white px-4 py-2 rounded-2xl text-sm font-bold shadow-md">📸 追加</button>` : ''}
+                        </div>
+                        <div class="grid grid-cols-4 gap-1.5">${thumbs}</div>
+                    </section>`;
+                }).join('');
         }
 
         // ===== カードの操作 =====
@@ -653,7 +759,7 @@
         function addPhotos(id) {
             const ev = evById(id);
             if (!ev) return;
-            if (ev.pCloudUploadURL) window.open(addExternalParam(ev.pCloudUploadURL), '_blank');
+            if (ev.pCloudUploadURL) openUploader(id);
             else if (IS_ADMIN) reissueUploadLink(id);
         }
 
@@ -680,8 +786,12 @@
                 const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addPhotos', id }) });
                 const result = await res.json();
                 if (result.success && result.pCloudUploadURL) {
-                    window.open(addExternalParam(result.pCloudUploadURL), '_blank');
+                    const ev = evById(id);
+                    if (ev) ev.pCloudUploadURL = result.pCloudUploadURL;
+                    setWait(false);
+                    openUploader(id);
                     loadData();
+                    return;
                 } else {
                     alert('準備に失敗しました: ' + (result.error || '詳細なエラー情報がありません。'));
                 }
@@ -707,11 +817,13 @@
         }
 
         // --- LINE共有 ---
-        function getAppUrl(role, date) {
+        function getAppUrl(role, date, up) {
             const url = new URL(window.location.href);
             url.search = '';
+            url.hash = '';
             url.searchParams.set('role', role);
             if (date) url.searchParams.set('date', date);
+            if (up) url.searchParams.set('up', up);
             return url.toString();
         }
         function shareLine(id) {
@@ -719,8 +831,8 @@
             if (!ev) return;
             const role = ev.共有範囲 === '大塚家' ? 'paternal' : (ev.共有範囲 === '石川家' ? 'maternal' : 'guest');
             let msg = `【ファモリ】想い出の共有 ✨\n\nタイトル：${ev.タイトル}\n日付：${ev.日付}\n\nここに写真や動画を入れてね！📸\n\n`;
-            if (ev.pCloudUploadURL) msg += `① 写真・動画の【投稿】はこちら\n${addExternalParam(ev.pCloudUploadURL)}\n\n`;
-            msg += `② アプリで写真を見る\n${addExternalParam(getAppUrl(role, ev.日付))}`;
+            if (ev.pCloudUploadURL) msg += `📸 写真・動画を【送る】\n${addExternalParam(getAppUrl(role, ev.日付, ev.ID))}\n\n`;
+            msg += `👀 写真を【見る】\n${addExternalParam(getAppUrl(role, ev.日付))}`;
             window.open(`https://line.me/R/msg/text/?${encodeURIComponent(msg)}`, '_blank');
         }
 
@@ -864,7 +976,7 @@
                 if (!result.success) throw new Error(result.error || '保存に失敗しました');
                 store('famory_last_range', range);
                 closeForm();
-                openSuccessModal(result.pCloudUploadURL);
+                openSuccessModal(result);
             } catch (err) {
                 console.error('Save Error:', err);
                 alert('エラーが発生しました: ' + err.message);
@@ -873,19 +985,16 @@
         }
 
         // --- 保存完了モーダル ---
-        function openSuccessModal(uploadUrl) {
-            const link = document.getElementById('success-upload-link');
-            if (uploadUrl) {
-                link.href = addExternalParam(uploadUrl);
-                link.classList.remove('hidden');
-            } else {
-                link.classList.add('hidden');
-            }
+        let lastCreatedId = null;
+        function openSuccessModal(result) {
+            lastCreatedId = result.id;
+            document.getElementById('success-upload-link').classList.toggle('hidden', !result.pCloudUploadURL);
             document.getElementById('success-modal').classList.remove('hidden');
         }
-        function closeSuccessModal() {
+        async function closeSuccessModal(openUp) {
             document.getElementById('success-modal').classList.add('hidden');
-            loadData();
+            await loadData();
+            if (openUp && lastCreatedId) openUploader(lastCreatedId);
         }
 
         // --- ヘルプ・紹介 ---
@@ -943,6 +1052,74 @@
                 if (data.result !== 0 || !data.hosts || !data.path) return null;
                 return `https://${data.hosts[0]}${data.path}`;
             } catch (e) { return null; }
+        }
+
+        // ===== アプリ内アップロード（pCloud uploadtolink） =====
+        let upEvent = null, uploading = false;
+        const UPLOADER_NAME = { admin: 'パパママ', paternal: '大塚家', maternal: '石川家' }[ROLE] || 'ゲスト';
+
+        function upShow(state) {
+            ['pick', 'progress', 'done'].forEach(k => document.getElementById(`up-${k}`).classList.toggle('hidden', k !== state));
+            document.getElementById('up-close').classList.toggle('hidden', state === 'done');
+            document.getElementById('up-fallback').classList.toggle('hidden', state === 'done');
+        }
+        function openUploader(id) {
+            const ev = evById(id);
+            if (!ev || !ev.pCloudUploadURL) return;
+            upEvent = ev;
+            document.getElementById('up-title').textContent = `${fmtDate(ev.日付)}　${ev.タイトル}`;
+            document.getElementById('up-fallback').href = addExternalParam(ev.pCloudUploadURL);
+            document.getElementById('up-input').value = '';
+            upShow('pick');
+            const sheet = document.getElementById('upload-sheet');
+            sheet.classList.remove('hidden');
+            sheet.classList.add('flex');
+        }
+        function closeUploader(view) {
+            if (uploading && !confirm('まだ送っている途中です。やめますか？')) return;
+            const sheet = document.getElementById('upload-sheet');
+            sheet.classList.add('hidden');
+            sheet.classList.remove('flex');
+            if (view && upEvent) { render(); openViewer(upEvent.ID); }
+        }
+        function uploadOne(code, file, onProgress) {
+            return new Promise(resolve => {
+                const fd = new FormData();
+                fd.append('file', file, file.name);
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `https://api.pcloud.com/uploadtolink?code=${encodeURIComponent(code)}&names=${encodeURIComponent(UPLOADER_NAME)}`);
+                xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+                xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText).result === 0); } catch (e) { resolve(false); } };
+                xhr.onerror = () => resolve(false);
+                xhr.send(fd);
+            });
+        }
+        async function startUpload(fileList) {
+            const files = Array.from(fileList || []);
+            if (!files.length || !upEvent) return;
+            const code = extractPCloudCode(upEvent.pCloudUploadURL);
+            uploading = true;
+            upShow('progress');
+            let ok = 0;
+            for (let i = 0; i < files.length; i++) {
+                const setP = f => {
+                    document.getElementById('up-status').textContent = `送っています… ${i + 1} / ${files.length}`;
+                    document.getElementById('up-bar').style.width = `${((i + f) / files.length) * 100}%`;
+                };
+                setP(0);
+                if (await uploadOne(code, files[i], setP)) ok++;
+            }
+            uploading = false;
+            // 写真一覧を読み直す
+            delete photosData[upEvent.ID];
+            delete _pcCache[extractPCloudCode(upEvent.pCloudURL)];
+            if (ok === 0) {
+                upShow('pick');
+                alert('送れませんでした。電波の良いところでもう一度試すか、下の「うまくいかないときはこちら」から送ってください。');
+                return;
+            }
+            document.getElementById('up-done-msg').innerHTML = `ありがとう！<br>${ok}件 届きました` + (ok < files.length ? `<br><span class="text-sm text-rose-500">（${files.length - ok}件は送れませんでした）</span>` : '');
+            upShow('done');
         }
 
         // ===== ビューア（写真・動画をその場で表示） =====
