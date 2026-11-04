@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ファモリ | 家族の思い出カレンダー</title>
-    <!-- Version: 1.2 (Debug Info) -->
+    <!-- Version: 2.0 (UI refresh) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -47,9 +47,10 @@
         #loading-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(15, 23, 42, 0.35);
             backdrop-filter: blur(4px);
             display: none;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             z-index: 1000;
@@ -87,11 +88,19 @@
         .album-thumb .thumb-grid { display: grid; grid-template-columns: 1fr 1fr; width: 100%; height: 100%; }
         .album-thumb .thumb-grid img { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Inline photo grid (timeline cards) */
-        .pcloud-photos { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-        .pcloud-loading { color: #94a3b8; font-size: 12px; padding: 4px 0; }
-        .pcloud-photo { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; cursor: pointer; transition: opacity 0.15s; flex-shrink: 0; }
-        .pcloud-photo:active { opacity: 0.65; }
+        /* Album card cover */
+        .cover { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .cover img { width: 100%; height: 100%; object-fit: cover; }
+        .cover .thumb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 100%; height: 100%; }
+        .cover .thumb-grid img { width: 100%; height: 100%; object-fit: cover; }
+        /* Calendar cells (1画面に収まる高さ) */
+        .cal-cell { height: max(52px, calc((100dvh - 250px) / 6)); background-size: cover; background-position: center; }
+        .cal-cell.has-photo { color: white; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+        .cal-cell.has-photo::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,0) 55%); border-radius: inherit; }
+        /* Quick picks */
+        #quick-picks { scrollbar-width: none; }
+        #quick-picks::-webkit-scrollbar { display: none; }
+        .count-badge { position: absolute; right: 8px; bottom: 8px; background: rgba(0,0,0,.55); color: white; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
 
         /* Lightbox */
         #lightbox { display: none; flex-direction: column; }
@@ -103,41 +112,33 @@
 
 <body class="min-h-screen">
 
+    <!-- Loading Overlay -->
     <div id="loading-overlay">
-        <div id="wait-msg" class="text-xl font-bold text-slate-600 animate-pulse">読み込み中...</div>
+        <div class="animate-spin h-12 w-12 border-4 border-white border-t-transparent rounded-full mb-4"></div>
+        <div id="wait-msg" class="text-white font-bold text-lg bg-black/30 px-4 py-2 rounded-full">読み込み中...</div>
     </div>
 
     <!-- Header -->
-    <header class="bg-white px-4 py-4 shadow-sm sticky top-0 z-50">
+    <header class="bg-white px-4 py-3 shadow-sm sticky top-0 z-50">
         <div class="max-w-4xl mx-auto flex items-center justify-between">
-            <h1 class="flex items-center gap-3 cursor-pointer" onclick="switchView('calendar'); clearDateFilter();">
+            <h1 class="flex items-center gap-3 cursor-pointer" onclick="goHome()">
                 <img src="logo_famory.png" alt="FAMORY" class="h-10 sm:h-12 w-auto">
             </h1>
             <div class="flex items-center gap-1">
-                <!-- Info Button (Image) -->
-                <button onclick="openInfo()"
+                <button onclick="toggleSearch()" aria-label="検索"
                     class="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                </button>
-                <!-- Help Button (Guide) -->
-                <button onclick="openHelp()"
-                    class="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                </button>
-                <button onclick="toggleSearch()"
-                    class="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </button>
+                <button onclick="openHelp()" aria-label="使いかた"
+                    class="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </button>
             </div>
@@ -145,80 +146,66 @@
     </header>
 
     <!-- Nav Tabs -->
-    <nav class="bg-white border-b sticky top-[68px] z-40">
+    <nav class="bg-white border-b sticky top-[64px] sm:top-[72px] z-40">
         <div class="max-w-4xl mx-auto flex">
+            <button id="tab-album" onclick="switchView('album')"
+                class="flex-1 py-3 text-lg font-bold text-center tab-active">📷 アルバム</button>
             <button id="tab-calendar" onclick="switchView('calendar')"
-                class="flex-1 py-4 text-lg font-bold text-center tab-active">カレンダー</button>
-            <button id="tab-timeline" onclick="switchView('timeline')"
-                class="flex-1 py-4 text-lg font-bold text-center text-slate-400">タイムライン</button>
-            <button id="tab-photos" onclick="switchView('photos')"
-                class="flex-1 py-4 text-lg font-bold text-center text-slate-400">フォト</button>
+                class="flex-1 py-3 text-lg font-bold text-center text-slate-400">📅 カレンダー</button>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main class="max-w-4xl mx-auto p-4 pb-24">
+    <main class="max-w-4xl mx-auto p-4 pb-28">
 
-        <!-- Header: Month Navigation -->
-        <div id="month-nav" class="flex items-center justify-between mb-6 glass-card p-2 shadow-sm">
-            <button onclick="changeMonth(-1)"
-                class="p-4 text-2xl font-bold text-slate-400 hover:text-blue-500 transition-colors">〈</button>
-            <div id="current-month-display" class="text-2xl font-bold text-slate-700">読み込み中...</div>
-            <button onclick="changeMonth(1)"
-                class="p-4 text-2xl font-bold text-slate-400 hover:text-blue-500 transition-colors">〉</button>
+        <!-- Search -->
+        <div id="search-area" class="hidden mb-4">
+            <input type="search" id="search-input" oninput="onSearch(this.value)" placeholder="タイトル・場所・メモで探す"
+                class="w-full p-4 border-2 border-slate-200 rounded-2xl text-lg focus:outline-none focus:border-blue-300">
         </div>
 
-        <!-- Search Area (Hidden) -->
-        <div id="search-area" class="hidden mb-6">
-            <input type="text" id="search-input" onkeyup="filterData()" placeholder="キーワードで検索"
-                class="w-full p-4 border-2 border-tan-200 rounded-2xl text-lg focus:outline-none focus:border-tan-400">
+        <!-- Filter chip (日付・検索で絞り込み中) -->
+        <div id="filter-chip" class="hidden mb-4"></div>
+
+        <!-- Album View -->
+        <div id="view-album">
+            <div id="album-container" class="space-y-8"></div>
         </div>
 
         <!-- Calendar View -->
-        <div id="view-calendar" class="space-y-4">
-            <div class="grid grid-cols-7 gap-1 text-center font-bold text-slate-400 mb-2">
-                <div class="text-red-400">日</div>
-                <div>月</div>
-                <div>火</div>
-                <div>水</div>
-                <div>木</div>
-                <div>金</div>
-                <div class="text-blue-400">土</div>
+        <div id="view-calendar" class="hidden">
+            <div class="flex items-center justify-between mb-3 glass-card px-2 py-1">
+                <button onclick="changeMonth(-1)" aria-label="前の月"
+                    class="px-5 py-3 text-2xl font-bold text-slate-400 hover:text-blue-500">〈</button>
+                <button onclick="goToday()" id="current-month-display" class="text-xl font-bold text-slate-700"></button>
+                <button onclick="changeMonth(1)" aria-label="次の月"
+                    class="px-5 py-3 text-2xl font-bold text-slate-400 hover:text-blue-500">〉</button>
             </div>
-            <div id="calendar-body"
-                class="grid grid-cols-7 gap-1 bg-white p-2 rounded-3xl shadow-sm border border-slate-100 min-h-[400px]">
-                <!-- Generated by JS -->
+            <div class="grid grid-cols-7 gap-1 text-center text-sm font-bold text-slate-400 mb-1">
+                <div class="text-red-400">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="text-blue-400">土</div>
             </div>
-        </div>
-
-        <!-- Photos View -->
-        <div id="view-photos" class="hidden">
-            <div id="photos-container" class="space-y-8"></div>
-        </div>
-
-        <!-- Timeline View -->
-        <div id="view-timeline" class="hidden space-y-6">
-            <div id="timeline-container" class="space-y-4">
-                <!-- Data cards here -->
+            <div id="calendar-body" class="grid grid-cols-7 gap-1"></div>
+            <div class="flex justify-center gap-4 mt-3 text-xs text-slate-400">
+                <span><span class="dot dot-all"></span>全員</span>
+                <span><span class="dot dot-paternal"></span>大塚家</span>
+                <span><span class="dot dot-maternal"></span>石川家</span>
             </div>
         </div>
-
     </main>
 
     <!-- Add Button (Admin only) -->
     <div id="admin-only" class="fixed bottom-6 right-6 z-50 hidden">
-        <button onclick="openForm()"
+        <button onclick="openForm()" aria-label="思い出を登録"
             class="brand-gradient text-white w-16 h-16 rounded-full shadow-xl flex items-center justify-center text-4xl font-bold hover:scale-110 active:scale-95 transition-transform">
             ＋
         </button>
     </div>
 
-    <!-- Modal -->
+    <!-- Form Modal -->
     <div id="form-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-[100] p-4">
-        <div class="bg-[#fdfcf0] w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4">
+        <div class="bg-[#fdfcf0] w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 max-h-[95dvh] overflow-y-auto">
             <div class="flex justify-between items-center">
                 <h3 class="text-2xl font-bold text-slate-800">思い出を登録する</h3>
-                <button onclick="closeForm()"
+                <button onclick="closeForm()" aria-label="閉じる"
                     class="text-slate-400 p-2 hover:bg-slate-100 rounded-full transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -227,42 +214,56 @@
                     </svg>
                 </button>
             </div>
-            <form id="event-form" onsubmit="handleSave(event)" class="space-y-4">
+
+            <!-- よく使う予定（タップで入力） -->
+            <div id="quick-wrap" class="hidden">
+                <p class="text-sm font-bold text-slate-400 mb-2">よく使う予定</p>
+                <div id="quick-picks" class="flex gap-3 overflow-x-auto pb-1"></div>
+            </div>
+
+            <form id="event-form" onsubmit="handleSave(event)" class="space-y-3">
                 <input type="date" id="f-date" required
                     class="w-full p-4 border border-slate-200 rounded-2xl text-lg focus:ring-2 focus:ring-blue-100 outline-none">
                 <input type="text" id="f-title" placeholder="イベント名" required
                     class="w-full p-4 border border-slate-200 rounded-2xl text-lg focus:ring-2 focus:ring-blue-100 outline-none">
-                <textarea id="f-detail" placeholder="詳細（メモ）"
-                    class="w-full p-4 border border-slate-200 rounded-2xl text-lg h-32 focus:ring-2 focus:ring-blue-100 outline-none"></textarea>
                 <input type="text" id="f-location" placeholder="場所（店名・住所など）"
                     class="w-full p-4 border border-slate-200 rounded-2xl text-lg focus:ring-2 focus:ring-blue-100 outline-none">
-
-                <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                    <p class="text-sm font-bold text-blue-600 mb-1">💡 写真・動画について</p>
-                    <p class="text-xs text-blue-500 leading-relaxed">
-                        保存後、pCloudのアップロードページへのリンクが発行されます。アプリを離れて直接安全に投稿できるようになりました。</p>
-                </div>
+                <textarea id="f-detail" placeholder="メモ（なくてもOK）"
+                    class="w-full p-4 border border-slate-200 rounded-2xl text-lg h-24 focus:ring-2 focus:ring-blue-100 outline-none"></textarea>
 
                 <div>
-                    <label class="block text-sm font-bold text-slate-400 mb-2">共有範囲</label>
+                    <label class="block text-sm font-bold text-slate-400 mb-2">だれに見せる？</label>
                     <div class="grid grid-cols-3 gap-2">
                         <button type="button" onclick="setRange('全員')" id="r-all"
-                            class="range-btn p-3 rounded-xl border-2 border-blue-200 text-blue-500 font-bold bg-blue-50">全員</button>
+                            class="p-3 rounded-xl border-2 font-bold">🏠 全員</button>
                         <button type="button" onclick="setRange('大塚家')" id="r-paternal"
-                            class="range-btn p-3 rounded-xl border-2 border-slate-200 text-slate-400 font-bold">大塚家</button>
+                            class="p-3 rounded-xl border-2 font-bold">🔴 大塚家</button>
                         <button type="button" onclick="setRange('石川家')" id="r-maternal"
-                            class="range-btn p-3 rounded-xl border-2 border-slate-200 text-slate-400 font-bold">石川家</button>
+                            class="p-3 rounded-xl border-2 font-bold">🟢 石川家</button>
                     </div>
                     <input type="hidden" id="f-range" value="全員">
                 </div>
 
-                <div class="flex gap-4 pt-4">
+                <p class="text-xs text-slate-400">保存すると、写真・動画を投稿するためのページが作られます。</p>
+
+                <div class="flex gap-4 pt-2">
                     <button type="button" onclick="closeForm()"
                         class="flex-1 p-4 bg-slate-100 rounded-2xl font-bold text-lg">取消</button>
                     <button type="submit"
                         class="flex-1 p-4 bg-[#d2b48c] text-white rounded-2xl font-bold text-lg shadow-lg">保存する</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Action Sheet (管理者メニュー) -->
+    <div id="action-sheet" class="hidden fixed inset-0 z-[150] bg-black/50 items-end sm:items-center justify-center" onclick="if(event.target===this)closeActions()">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-3">
+            <p id="action-title" class="text-center font-bold text-slate-700 pb-1 truncate"></p>
+            <button id="act-line" class="w-full p-4 rounded-2xl bg-[#06c755] text-white font-bold text-lg">💬 LINEで共有</button>
+            <button id="act-reissue" class="w-full p-4 rounded-2xl bg-slate-100 text-slate-700 font-bold text-lg">🔗 投稿用リンクを作り直す</button>
+            <button id="act-delete" class="w-full p-4 rounded-2xl bg-red-50 text-red-500 font-bold text-lg">🗑 この思い出を削除</button>
+            <button onclick="closeActions()" class="w-full p-4 rounded-2xl text-slate-400 font-bold">キャンセル</button>
         </div>
     </div>
 
@@ -284,13 +285,6 @@
         </div>
     </div>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay"
-        class="fixed inset-0 bg-black/40 z-[100] hidden flex flex-col items-center justify-center">
-        <div class="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mb-4"></div>
-        <div id="wait-msg" class="text-white font-bold text-lg bg-black/20 px-4 py-2 rounded-full">処理中...</div>
-    </div>
-
     <!-- Info Image Modal -->
     <div id="info-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[120] p-4">
         <div class="relative max-w-4xl w-full max-h-[90vh] overflow-auto bg-white rounded-3xl p-2 shadow-2xl">
@@ -303,29 +297,23 @@
         </div>
     </div>
 
-    <!-- Photo Popup (bottom sheet) -->
-    <div id="photo-popup" class="hidden fixed inset-0 z-[200] bg-black/60 items-end justify-center">
-        <div class="bg-white rounded-t-3xl w-full max-w-lg" style="max-height:85vh;display:flex;flex-direction:column;">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-                <span id="photo-popup-title" class="font-bold text-slate-800 text-lg truncate max-w-[240px]"></span>
-                <button onclick="closePhotoPopup()" class="text-slate-400 text-2xl leading-none p-1">✕</button>
-            </div>
-            <div id="photo-popup-grid" class="p-3 grid grid-cols-3 gap-2 overflow-y-auto"></div>
-        </div>
-    </div>
 
-    <!-- Lightbox -->
+    <!-- Lightbox (写真・動画ビューア) -->
     <div id="lightbox" class="fixed inset-0 bg-black z-[300]">
-        <div class="flex items-center justify-between px-4 pt-safe pt-4 pb-2">
-            <button onclick="closeLightbox()" class="text-white p-2 text-2xl leading-none">✕</button>
+        <div class="flex items-center justify-between px-4 pt-4 pb-2">
+            <button onclick="closeLightbox()" aria-label="閉じる" class="text-white p-2 text-2xl leading-none">✕</button>
             <span id="lb-title" class="text-white font-bold text-sm truncate max-w-[180px]"></span>
             <span id="lb-counter" class="text-white/60 text-sm min-w-[40px] text-right"></span>
         </div>
-        <div id="lb-stage" class="flex-1 flex items-center justify-center relative" style="height: calc(100vh - 140px);">
-            <button onclick="lbPrev()" class="absolute left-2 z-10 text-white text-4xl px-3 py-6 bg-black/20 rounded-full select-none">‹</button>
+        <div id="lb-stage" class="flex-1 flex items-center justify-center relative" style="height: calc(100dvh - 140px);">
+            <button onclick="lbPrev()" aria-label="前へ" class="absolute left-2 z-10 text-white text-4xl px-3 py-6 bg-black/20 rounded-full select-none">‹</button>
             <img id="lb-img" src="" alt="" class="max-w-full max-h-full object-contain select-none" draggable="false">
-            <video id="lb-video" class="max-w-full max-h-full" controls playsinline style="display:none;max-height:calc(100vh - 140px)"></video>
-            <button onclick="lbNext()" class="absolute right-2 z-10 text-white text-4xl px-3 py-6 bg-black/20 rounded-full select-none">›</button>
+            <video id="lb-video" class="max-w-full max-h-full" controls playsinline preload="metadata" style="display:none;max-height:calc(100dvh - 140px)"></video>
+            <div id="lb-video-msg" class="hidden flex-col items-center gap-3 text-white">
+                <span class="text-sm opacity-70">動画を読み込めませんでした</span>
+                <button id="lb-video-open" class="bg-white text-slate-800 font-bold px-6 py-3 rounded-full">pCloudで開く</button>
+            </div>
+            <button onclick="lbNext()" aria-label="次へ" class="absolute right-2 z-10 text-white text-4xl px-3 py-6 bg-black/20 rounded-full select-none">›</button>
         </div>
         <div class="px-4 pb-4 pt-2">
             <div id="lb-strip" class="flex gap-2 overflow-x-auto"></div>
@@ -371,12 +359,12 @@
                         </li>
                         <li class="flex items-start gap-2">
                             <span class="text-rose-400 mt-1 shrink-0">●</span>
-                            <span>写真・動画の投稿<span class="text-rose-400/80 ml-1">（各イベントから）</span></span>
+                            <span>写真・動画の投稿<span class="text-rose-400/80 ml-1">（各カードの「📸 写真を追加」）</span></span>
                         </li>
                         <li class="flex items-start gap-2">
                             <span class="text-rose-400 mt-1 shrink-0">●</span>
                             <span><strong class="text-rose-900 border-b border-rose-200">アルバムをLINEで共有</strong><span
-                                    class="text-rose-400/80 ml-1">（管理者のみ）</span></span>
+                                    class="text-rose-400/80 ml-1">（カード右上の ⋯ から）</span></span>
                         </li>
                         <li class="flex items-start gap-2">
                             <span class="text-rose-400 mt-1 shrink-0">●</span>
@@ -403,7 +391,7 @@
                         <li class="flex items-start gap-2">
                             <span class="text-blue-400 mt-1 shrink-0">●</span>
                             <span><strong class="text-blue-900">写真・動画の投稿</strong><span
-                                    class="text-blue-400/80 ml-1">（各イベントから）</span></span>
+                                    class="text-blue-400/80 ml-1">（各カードの「📸 写真を追加」）</span></span>
                         </li>
                         <li class="flex items-start gap-2">
                             <span class="text-blue-400 mt-1 shrink-0">●</span>
@@ -422,6 +410,11 @@
                 <p class="text-[11px] text-slate-400">※ 写真を投稿すると、家族全員の見られる場所に保存されます。</p>
             </div>
 
+            <button onclick="closeHelp(); openInfo();"
+                class="w-full p-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-colors">
+                📖 ファモリについて（紹介画像）
+            </button>
+
             <button onclick="closeHelp()"
                 class="w-full p-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-colors">
                 閉じる
@@ -429,57 +422,45 @@
         </div>
     </div>
     <script>
-        function openHelp() {
-            document.getElementById('help-modal').classList.remove('hidden');
-        }
-        function closeHelp() {
-            document.getElementById('help-modal').classList.add('hidden');
-        }
-        function openInfo() {
-            document.getElementById('info-modal').classList.remove('hidden');
-        }
-        function closeInfo() {
-            document.getElementById('info-modal').classList.add('hidden');
-        }
-        // --- 設定エリア ---
+        // ===== 設定 =====
         const API_URL = 'https://uyzngbjkwbvouxmowfhu.supabase.co/functions/v1/famory-api';
-
         const params = new URLSearchParams(window.location.search);
         const ROLE = (params.get('role') || 'guest').toLowerCase();
-        console.log('Detected Role:', ROLE);
+        const IS_ADMIN = ROLE === 'admin';
 
-        let currentMonth = new Date();
         let allEvents = [];
-        let selectedDate = null; // 特定の日が選択されている場合
+        let currentView = 'album';
+        let currentMonth = new Date();
+        let dayFilter = null;   // 'YYYY-MM-DD'
+        let searchQ = '';
 
-        window.onload = function () {
-            console.log('Detected Role:', ROLE);
-            if (ROLE === 'admin') {
-                const btn = document.getElementById('admin-only');
-                if (btn) {
-                    btn.classList.remove('hidden');
-                    btn.style.display = 'block'; // 強制的に表示
-                    console.log('Admin button shown');
-                }
-            }
-            
-            // 遷移先対応: URLパラメータに日付があれば、その月のカレンダーを表示
-            const dateParam = params.get('date');
-            if (dateParam) {
-                const d = new Date(dateParam);
-                if (!isNaN(d.getTime())) {
-                    currentMonth = d;
-                }
-            }
-            loadData();
-        };
+        const RANGE_DOT = { '全員': 'dot-all', '大塚家': 'dot-paternal', '石川家': 'dot-maternal' };
 
+        // ===== ユーティリティ =====
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function evById(id) { return allEvents.find(e => String(e.ID) === String(id)); }
+        function ymd(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        function fmtDate(s) {
+            const [y, m, d] = String(s).split('-').map(Number);
+            const w = '日月火水木金土'[new Date(y, m - 1, d).getDay()];
+            return `${m}月${d}日（${w}）`;
+        }
+        function store(key, val) {
+            try {
+                if (val === undefined) return localStorage.getItem(key);
+                localStorage.setItem(key, val);
+            } catch (e) { return null; }
+        }
         function setWait(b, msg = '読み込み中...') {
             document.getElementById('wait-msg').innerText = msg;
             document.getElementById('loading-overlay').style.display = b ? 'flex' : 'none';
         }
 
-        // LINE外部ブラウザ対応用定数・関数
+        // LINE外部ブラウザ対応
         const LINE_EXT_PARAM = 'openExternalBrowser=1';
         function addExternalParam(url) {
             if (!url) return url;
@@ -489,210 +470,409 @@
             return hash ? newBase + '#' + hash : newBase;
         }
 
+        // ===== 起動 =====
+        window.onload = function () {
+            if (IS_ADMIN) document.getElementById('admin-only').classList.remove('hidden');
+            // LINEで共有されたリンク: その日の思い出を開く
+            const dateParam = params.get('date');
+            if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+                dayFilter = dateParam;
+                const [y, m] = dateParam.split('-').map(Number);
+                currentMonth = new Date(y, m - 1, 1);
+            }
+            setupSwipe();
+            loadData();
+        };
+
         async function loadData() {
             setWait(true);
             try {
-                const response = await fetch(`${API_URL}?action=getEvents&role=${ROLE}`);
+                const response = await fetch(`${API_URL}?action=getEvents&role=${encodeURIComponent(ROLE)}`);
                 const data = await response.json();
                 if (data.error) {
                     alert('サーバーエラー:\n' + data.error);
                 } else {
                     allEvents = data;
-                    renderView();
+                    render();
                 }
             } catch (err) {
                 console.error('通信エラー:', err);
-                alert('通信に失敗しました。時間をおいて再度お試しください。\n\n' +
-                    '【現在の設定URL】: ' + API_URL + '\n' +
-                    '【エラー内容】: ' + err.message);
+                alert('通信に失敗しました。時間をおいて再度お試しください。\n\n【エラー内容】: ' + err.message);
             }
             setWait(false);
         }
 
+        // ===== 画面切り替え =====
         function switchView(view) {
+            currentView = view;
+            document.getElementById('view-album').classList.toggle('hidden', view !== 'album');
             document.getElementById('view-calendar').classList.toggle('hidden', view !== 'calendar');
-            document.getElementById('view-timeline').classList.toggle('hidden', view !== 'timeline');
-            document.getElementById('view-photos').classList.toggle('hidden', view !== 'photos');
-            document.getElementById('month-nav').classList.toggle('hidden', view === 'photos');
-            ['calendar', 'timeline', 'photos'].forEach(v => {
+            ['album', 'calendar'].forEach(v => {
                 const tab = document.getElementById(`tab-${v}`);
-                if (!tab) return;
                 tab.classList.toggle('tab-active', v === view);
                 tab.classList.toggle('text-slate-400', v !== view);
             });
-            if (view === 'photos') {
-                renderPhotos();
-            } else {
-                renderView();
-            }
+            render();
+            window.scrollTo(0, 0);
         }
 
-        function renderView() {
-            if (!document.getElementById('view-photos').classList.contains('hidden')) return;
-            const isCalendar = !document.getElementById('view-calendar').classList.contains('hidden');
-            if (isCalendar) {
-                selectedDate = null;
-                renderCalendar();
-            } else {
-                renderTimeline();
-            }
+        function render() {
+            renderFilterChip();
+            if (currentView === 'album') renderAlbum();
+            else renderCalendar();
         }
 
-        // --- Calendar Logic ---
-        function renderCalendar() {
-            const body = document.getElementById('calendar-body');
-            const monthText = document.getElementById('current-month-display');
-            body.innerHTML = '';
-
-            const year = currentMonth.getFullYear();
-            const month = currentMonth.getMonth();
-            monthText.innerText = `${year}年 ${month + 1}月`;
-
-            const firstDay = new Date(year, month, 1).getDay();
-            const lastDate = new Date(year, month + 1, 0).getDate();
-
-            for (let i = 0; i < firstDay; i++) body.innerHTML += '<div class="h-16 border-b border-r bg-slate-50/50"></div>';
-
-            for (let d = 1; d <= lastDate; d++) {
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const dailyEvents = allEvents.filter(e => e.日付 === dateStr);
-
-                let dotsHtml = '';
-                dailyEvents.forEach(e => {
-                    let dotClass = 'dot-all';
-                    if (e.共有範囲 === '大塚家') dotClass = 'dot-paternal';
-                    else if (e.共有範囲 === '石川家') dotClass = 'dot-maternal';
-                    dotsHtml += `<span class="dot ${dotClass}"></span>`;
-                });
-
-                const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
-                body.innerHTML += `
-                    <div onclick="showDateTimeline('${dateStr}')" class="h-16 border-b border-r p-1 text-sm font-bold flex flex-col items-center cursor-pointer hover:bg-blue-50/50 transition-colors">
-                        <span class="${isToday ? 'brand-gradient text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}">${d}</span>
-                        <div class="flex flex-wrap justify-center gap-px">${dotsHtml}</div>
-                    </div>
-                `;
-            }
+        function goHome() {
+            dayFilter = null;
+            searchQ = '';
+            document.getElementById('search-input').value = '';
+            document.getElementById('search-area').classList.add('hidden');
+            switchView('album');
         }
 
-        function showDateTimeline(dateStr) {
-            selectedDate = dateStr;
-            switchView('timeline');
+        // ===== 絞り込み（日付・検索） =====
+        function renderFilterChip() {
+            const chip = document.getElementById('filter-chip');
+            const label = dayFilter ? `${fmtDate(dayFilter)} の思い出` : (searchQ ? `「${esc(searchQ)}」の検索結果` : '');
+            if (!label || currentView !== 'album') { chip.classList.add('hidden'); return; }
+            chip.classList.remove('hidden');
+            chip.innerHTML = `<div class="flex items-center justify-between bg-blue-50 text-blue-600 rounded-2xl px-4 py-3">
+                <span class="font-bold">${label}</span>
+                <button onclick="clearFilter()" class="font-bold bg-white rounded-full px-4 py-1.5 shadow-sm">すべて表示</button>
+            </div>`;
         }
-
-        function changeMonth(n) {
-            currentMonth.setMonth(currentMonth.getMonth() + n);
-            selectedDate = null; // 月を変更した時は特定日選択を解除
-            renderView();
+        function clearFilter() {
+            dayFilter = null;
+            searchQ = '';
+            document.getElementById('search-input').value = '';
+            render();
         }
-
-        // --- Timeline Logic ---
-        function renderTimeline(list) {
-            const container = document.getElementById('timeline-container');
-            const monthText = document.getElementById('current-month-display');
-            container.innerHTML = '';
-
-            const year = currentMonth.getFullYear();
-            const month = currentMonth.getMonth();
-
-            // 表示するリストの決定
-            let displayList = list;
-            if (!displayList) {
-                if (selectedDate) {
-                    // 特定の日が選択されている場合
-                    displayList = allEvents.filter(e => e.日付 === selectedDate);
-                    monthText.innerHTML = `<span class="text-xs font-bold text-blue-500/60 uppercase tracking-widest cursor-pointer hover:text-blue-500" onclick="clearDateFilter()">月間表示に戻る</span><br>${selectedDate.replace(/-/g, '/')} の思い出`;
-                } else {
-                    // 当月分を表示
-                    const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
-                    displayList = allEvents.filter(e => e.日付.startsWith(prefix));
-                    monthText.innerText = `${year}年 ${month + 1}月`;
-                }
-            }
-
-            if (!displayList || displayList.length === 0) {
-                container.innerHTML = '<div class="text-center py-20 text-slate-400">予定がありません</div>';
-                return;
-            }
-
-            // 日付順に並び替え
-            displayList.sort((a, b) => b.日付.localeCompare(a.日付));
-
-            displayList.forEach(e => {
-                const rangeLabel = e.共有範囲 === '全員' ? '🏠 全員' : (e.共有範囲 === '大塚家' ? '🔴 大塚家' : '🟢 石川家');
-                const rangeCol = e.共有範囲 === '全員' ? 'text-blue-500 bg-blue-50' : (e.共有範囲 === '大塚家' ? 'text-red-500 bg-red-50' : 'text-emerald-500 bg-emerald-50');
-
-                container.innerHTML += `
-                    <div class="glass-card p-6 space-y-4 relative overflow-hidden">
-                        <div class="flex justify-between items-start">
-                            <span class="text-xs font-bold px-3 py-1 rounded-full ${rangeCol}">${rangeLabel}</span>
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm text-slate-400 font-bold tracking-tight">${e.日付}</span>
-                                ${ROLE === 'admin' ? `<button onclick="handleDelete('${e.ID}')" class="text-slate-300 hover:text-red-400 p-1 transition-colors">✕</button>` : ''}
-                            </div>
-                        </div>
-                        <h3 class="text-2xl font-bold text-slate-800">${e.タイトル}</h3>
-                        ${e.詳細 ? `<p class="text-slate-600 leading-relaxed whitespace-pre-wrap">${e.詳細}</p>` : ''}
-
-                        <div class="flex flex-wrap gap-3 pt-2">
-                             ${e.pCloudURL ? `
-                                <button onclick="openPhotoPopup('${e.ID}')" class="btn-premium px-4 py-2.5 flex items-center gap-2 text-sm font-bold text-slate-600">
-                                    <span>🖼</span> 写真を見る
-                                </button>
-                             ` : ''}
-                             ${e.場所 ? `
-                                <button onclick="openMap('${e.場所}')" class="btn-premium px-4 py-2.5 flex items-center gap-2 text-sm font-bold text-slate-600">
-                                    <span class="text-blue-500">🗺</span> ${e.場所}
-                                </button>
-                            ` : ''}
-                             ${e.pCloudUploadURL ? `
-                                <a href="${addExternalParam(e.pCloudUploadURL)}" target="_blank" class="brand-gradient text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 text-sm font-bold shadow-lg shadow-blue-100 hover:scale-105 transition-transform">
-                                    <span>📸</span> 写真を追加する
-                                </a>
-                             ` : (ROLE === 'admin' ? `
-                                <button onclick="reissueUploadLink('${e.ID}')" class="brand-gradient text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 text-sm font-bold shadow-lg shadow-blue-100 hover:scale-105 transition-transform">
-                                    <span>📸</span> 写真を追加する
-                                </button>
-                             ` : '')}
-                             ${ROLE === 'admin' ? `
-                                <button onclick="shareLine('${e.タイトル}', '${e.日付}', '${e.pCloudUploadURL}', '${e.共有範囲}')" class="bg-[#06c755] text-white p-2.5 rounded-2xl flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-green-100" title="LINEで共有">
-                                    <svg viewBox="0 0 24 24" class="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M24 10.304c0-4.662-4.605-8.463-10.276-8.463C8.044 1.841 3.438 5.642 3.438 10.304c0 4.18 3.655 7.684 8.59 8.354.335.072.791.221.906.508.104.258.068.663.033 1.055-.104.996-.48 4.298-.48 4.298s-.175 1.144.75 1.144c.82 0 4.341-2.553 5.922-4.685.112-.132.39-1.127.39-1.127 3.511-1.282 5.031-4.706 5.031-8.586zM9.54 13.513H7.567a.465.465 0 01-.465-.465V7.575a.465.465 0 01.465-.465h1.973a.465.465 0 01.465.465.465.465 0 01-.465.465H8.032v1.543H9.54a.465.465 0 01.465.465.465.465 0 01-.465.465H8.032v1.534H9.54a.465.465 0 01.465.465.465.465 0 01-.465.465zm3.172 0h-1.97a.465.465 0 01-.465-.465V7.575a.465.465 0 01.465-.465.465.465 0 01.465.465V12.58h1.505a.465.465 0 01.465.465.465.465 0 01-.465.465zm1.505-.465a.465.465 0 01-.465.465h-.001a.465.465 0 01-.465-.465V7.575a.465.465 0 01.465-.465.465.465 0 01.465.465v5.473zm4.242 0V13.05a.465.465 0 01-.465.465h-1.391V7.575a.465.465 0 01.465-.465.465.465 0 01.465.465V12.58h.923a.465.465 0 01.465.465.465.465 0 01-.465.465z"/></svg>
-                                </button>
-                             ` : ''}
-                        </div>
-                    </div>
-                `;
-            });
-
-        }
-
-        function openMap(loc) {
-            window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(loc), '_blank');
-        }
-
         function toggleSearch() {
             const area = document.getElementById('search-area');
             area.classList.toggle('hidden');
-            if (!area.classList.contains('hidden')) document.getElementById('search-input').focus();
+            if (!area.classList.contains('hidden')) {
+                if (currentView !== 'album') switchView('album');
+                document.getElementById('search-input').focus();
+            }
+        }
+        function onSearch(v) {
+            searchQ = v.trim();
+            dayFilter = null;
+            if (currentView !== 'album') switchView('album'); else render();
         }
 
-        function filterData() {
-            const q = document.getElementById('search-input').value.toLowerCase();
-            const filtered = allEvents.filter(e =>
-                e.タイトル.toLowerCase().includes(q) ||
-                (e.詳細 && e.詳細.toLowerCase().includes(q)) ||
-                (e.場所 && e.場所.toLowerCase().includes(q))
-            );
-            renderTimeline(filtered);
-            if (document.getElementById('view-timeline').classList.contains('hidden')) switchView('timeline');
+        // ===== アルバム =====
+        function albumList() {
+            let list = allEvents.slice();
+            if (dayFilter) list = list.filter(e => e.日付 === dayFilter);
+            if (searchQ) {
+                const q = searchQ.toLowerCase();
+                list = list.filter(e => [e.タイトル, e.詳細, e.場所].some(v => v && String(v).toLowerCase().includes(q)));
+            }
+            return list.sort((a, b) => b.日付.localeCompare(a.日付) || String(b.ID).localeCompare(String(a.ID)));
         }
 
-        function clearDateFilter() {
-            selectedDate = null;
-            renderTimeline();
+        function renderAlbum() {
+            const container = document.getElementById('album-container');
+            const list = albumList();
+            if (!list.length) {
+                container.innerHTML = `<div class="text-center py-20 text-slate-400">${allEvents.length ? '見つかりませんでした' : 'まだ思い出がありません'}</div>`;
+                return;
+            }
+            const groups = {};
+            list.forEach(e => (groups[e.日付.substring(0, 7)] ||= []).push(e));
+            container.innerHTML = Object.keys(groups).map(month => {
+                const [y, m] = month.split('-');
+                return `<section>
+                    <h2 class="text-base font-bold text-slate-400 mb-3 px-1">${y}年 ${parseInt(m)}月</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">${groups[month].map(cardHtml).join('')}</div>
+                </section>`;
+            }).join('');
+            loadCovers(list);
         }
 
-        // --- Success Modal ---
+        function cardHtml(e) {
+            const id = esc(e.ID);
+            const hasLink = !!e.pCloudURL;
+            const canAdd = !!e.pCloudUploadURL || IS_ADMIN;
+            return `<article class="glass-card overflow-hidden">
+                <button ${hasLink ? `onclick="openViewer('${id}')"` : 'disabled'} id="cv-${id}"
+                    class="cover relative w-full aspect-[4/3] bg-slate-100">
+                    <span class="text-4xl opacity-30">📷</span>
+                </button>
+                <div class="p-4 space-y-2">
+                    <div class="flex justify-between items-start gap-2">
+                        <div class="min-w-0">
+                            <p class="text-sm font-bold text-slate-400"><span class="dot ${RANGE_DOT[e.共有範囲] || 'dot-all'}"></span> ${fmtDate(e.日付)}</p>
+                            <h3 class="text-xl font-bold text-slate-800 truncate">${esc(e.タイトル)}</h3>
+                        </div>
+                        ${IS_ADMIN ? `<button onclick="openActions('${id}')" aria-label="メニュー" class="text-slate-400 text-2xl leading-none px-2 py-1 -mr-2 rounded-full hover:bg-slate-100">⋯</button>` : ''}
+                    </div>
+                    ${e.詳細 ? `<p class="text-slate-500 text-sm leading-relaxed whitespace-pre-wrap line-clamp-2">${esc(e.詳細)}</p>` : ''}
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        ${e.場所 ? `<button onclick="openMap('${id}')" class="btn-premium px-3 py-2 text-sm font-bold text-slate-600 max-w-full truncate">📍 ${esc(e.場所)}</button>` : ''}
+                        ${canAdd ? `<button onclick="addPhotos('${id}')" class="brand-gradient text-white px-4 py-2 rounded-2xl text-sm font-bold shadow-md ml-auto">📸 写真を追加</button>` : ''}
+                    </div>
+                </div>
+            </article>`;
+        }
+
+        async function loadCovers(list) {
+            const targets = list.filter(e => e.pCloudURL);
+            for (let i = 0; i < targets.length; i += 5) {
+                await Promise.all(targets.slice(i, i + 5).map(async e => {
+                    await loadAlbumData(e);
+                    applyCover(e.ID);
+                }));
+            }
+        }
+
+        function applyCover(id) {
+            const el = document.getElementById(`cv-${id}`);
+            const data = photosData[id];
+            if (!el || !data) return;
+            const n = data.photos.length;
+            if (!n) {
+                el.innerHTML = `<span class="text-sm text-slate-400 font-bold">まだ写真がありません</span>`;
+                return;
+            }
+            const imgs = data.photos.filter(p => !p.isVideo);
+            let inner;
+            if (!imgs.length) inner = `<span class="text-5xl">🎬</span>`;
+            else if (imgs.length >= 4) inner = `<div class="thumb-grid">${imgs.slice(0, 4).map(p => `<img src="${thumbUrl(data.code, p.fileid, '300x300')}" loading="lazy" onerror="this.style.visibility='hidden'">`).join('')}</div>`;
+            else inner = `<img src="${thumbUrl(data.code, imgs[0].fileid, '600x450')}" loading="lazy" onerror="this.style.visibility='hidden'">`;
+            el.innerHTML = inner + `<span class="count-badge">${n}件</span>`;
+        }
+
+        // ===== カードの操作 =====
+        function openMap(id) {
+            const ev = evById(id);
+            if (ev) window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ev.場所), '_blank');
+        }
+
+        function addPhotos(id) {
+            const ev = evById(id);
+            if (!ev) return;
+            if (ev.pCloudUploadURL) window.open(addExternalParam(ev.pCloudUploadURL), '_blank');
+            else if (IS_ADMIN) reissueUploadLink(id);
+        }
+
+        function openActions(id) {
+            const ev = evById(id);
+            if (!ev) return;
+            document.getElementById('action-title').textContent = `${fmtDate(ev.日付)}　${ev.タイトル}`;
+            document.getElementById('act-line').onclick = () => { closeActions(); shareLine(id); };
+            document.getElementById('act-reissue').onclick = () => { closeActions(); reissueUploadLink(id); };
+            document.getElementById('act-delete').onclick = () => { closeActions(); handleDelete(id); };
+            const sheet = document.getElementById('action-sheet');
+            sheet.classList.remove('hidden');
+            sheet.classList.add('flex');
+        }
+        function closeActions() {
+            const sheet = document.getElementById('action-sheet');
+            sheet.classList.add('hidden');
+            sheet.classList.remove('flex');
+        }
+
+        async function reissueUploadLink(id) {
+            setWait(true, 'アップロード用リンクを準備しています...');
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addPhotos', id }) });
+                const result = await res.json();
+                if (result.success && result.pCloudUploadURL) {
+                    window.open(addExternalParam(result.pCloudUploadURL), '_blank');
+                    loadData();
+                } else {
+                    alert('準備に失敗しました: ' + (result.error || '詳細なエラー情報がありません。'));
+                }
+            } catch (err) {
+                alert('通信エラーが発生しました');
+            }
+            setWait(false);
+        }
+
+        async function handleDelete(id) {
+            const ev = evById(id);
+            if (!confirm(`「${ev ? ev.タイトル : ''}」を削除しますか？\n（pCloudの写真は消えません）`)) return;
+            setWait(true, '削除しています...');
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteEvent', id, role: ROLE }) });
+                const result = await res.json();
+                if (result.success) loadData();
+                else alert('削除に失敗しました: ' + (result.error || ''));
+            } catch (err) {
+                alert('通信エラーが発生しました');
+            }
+            setWait(false);
+        }
+
+        // --- LINE共有 ---
+        function getAppUrl(role, date) {
+            const url = new URL(window.location.href);
+            url.search = '';
+            url.searchParams.set('role', role);
+            if (date) url.searchParams.set('date', date);
+            return url.toString();
+        }
+        function shareLine(id) {
+            const ev = evById(id);
+            if (!ev) return;
+            const role = ev.共有範囲 === '大塚家' ? 'paternal' : (ev.共有範囲 === '石川家' ? 'maternal' : 'guest');
+            let msg = `【ファモリ】想い出の共有 ✨\n\nタイトル：${ev.タイトル}\n日付：${ev.日付}\n\nここに写真や動画を入れてね！📸\n\n`;
+            if (ev.pCloudUploadURL) msg += `① 写真・動画の【投稿】はこちら\n${addExternalParam(ev.pCloudUploadURL)}\n\n`;
+            msg += `② アプリで写真を見る\n${addExternalParam(getAppUrl(role, ev.日付))}`;
+            window.open(`https://line.me/R/msg/text/?${encodeURIComponent(msg)}`, '_blank');
+        }
+
+        // ===== カレンダー =====
+        function renderCalendar() {
+            const body = document.getElementById('calendar-body');
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+            document.getElementById('current-month-display').innerText = `${year}年 ${month + 1}月`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+            const today = ymd(new Date());
+            let html = '';
+            for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell"></div>';
+
+            const monthEvents = [];
+            for (let d = 1; d <= lastDate; d++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const evs = allEvents.filter(e => e.日付 === dateStr);
+                monthEvents.push(...evs);
+                const dow = (firstDay + d - 1) % 7;
+                const numCol = dow === 0 ? 'text-red-400' : (dow === 6 ? 'text-blue-400' : 'text-slate-600');
+                const isToday = dateStr === today;
+                html += `<div id="cal-${dateStr}" ${evs.length ? `onclick="openDay('${dateStr}')"` : ''}
+                    class="cal-cell relative rounded-xl p-1 text-sm font-bold flex flex-col items-center ${evs.length ? 'bg-white shadow-sm cursor-pointer active:scale-95 transition-transform' : 'bg-white/40'}">
+                    <span class="relative z-10 ${isToday ? 'brand-gradient text-white rounded-full w-6 h-6 flex items-center justify-center' : numCol}">${d}</span>
+                    <div class="relative z-10 flex flex-wrap justify-center gap-px mt-auto">${evs.map(e => `<span class="dot ${RANGE_DOT[e.共有範囲] || 'dot-all'}"></span>`).join('')}</div>
+                </div>`;
+            }
+            body.innerHTML = html;
+
+            // その日の写真を背景に
+            monthEvents.filter(e => e.pCloudURL).forEach(async e => {
+                await loadAlbumData(e);
+                const data = photosData[e.ID];
+                const img = data && data.photos.find(p => !p.isVideo);
+                const cell = document.getElementById(`cal-${e.日付}`);
+                if (img && cell && !cell.classList.contains('has-photo')) {
+                    cell.style.backgroundImage = `url('${thumbUrl(data.code, img.fileid, '200x200')}')`;
+                    cell.classList.add('has-photo');
+                    cell.querySelector('span').classList.remove('text-slate-600', 'text-red-400', 'text-blue-400');
+                }
+            });
+        }
+
+        function openDay(dateStr) {
+            dayFilter = dateStr;
+            searchQ = '';
+            switchView('album');
+        }
+        function changeMonth(n) {
+            currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + n, 1);
+            renderCalendar();
+        }
+        function goToday() {
+            currentMonth = new Date();
+            renderCalendar();
+        }
+
+        // ===== 登録フォーム =====
+        function openForm() {
+            const dateInput = document.getElementById('f-date');
+            dateInput.value = dayFilter || ymd(new Date());
+            setRange(store('famory_last_range') || '全員');
+            renderQuickPicks();
+            document.getElementById('form-modal').classList.remove('hidden');
+        }
+
+        function closeForm() {
+            document.getElementById('form-modal').classList.add('hidden');
+            document.getElementById('event-form').reset();
+        }
+
+        function setRange(val) {
+            document.getElementById('f-range').value = val;
+            const ids = { '全員': 'r-all', '大塚家': 'r-paternal', '石川家': 'r-maternal' };
+            const cols = { '全員': 'border-blue-300 text-blue-600 bg-blue-50', '大塚家': 'border-rose-300 text-rose-600 bg-rose-50', '石川家': 'border-emerald-300 text-emerald-600 bg-emerald-50' };
+            Object.keys(ids).forEach(k => {
+                document.getElementById(ids[k]).className = 'p-3 rounded-xl border-2 font-bold ' +
+                    (k === val ? cols[k] : 'border-slate-200 text-slate-400 bg-white');
+            });
+        }
+
+        // よく使う予定: 2回以上登録された「タイトル＋場所」を回数順に
+        function quickPickList() {
+            const map = {};
+            allEvents.forEach(e => {
+                const key = `${e.タイトル}\u0000${e.場所 || ''}`;
+                const m = map[key] ||= { title: e.タイトル, location: e.場所 || '', count: 0, latest: e };
+                m.count++;
+                if (e.日付 > m.latest.日付) m.latest = e;
+            });
+            return Object.values(map).filter(m => m.count >= 2).sort((a, b) => b.count - a.count).slice(0, 6);
+        }
+
+        function renderQuickPicks() {
+            const picks = quickPickList();
+            const wrap = document.getElementById('quick-wrap');
+            const box = document.getElementById('quick-picks');
+            wrap.classList.toggle('hidden', !picks.length);
+            box.innerHTML = picks.map((p, i) => `<button type="button" onclick="applyQuickPick(${i})" class="flex-shrink-0 w-20 text-center active:scale-95 transition-transform">
+                <div id="qp-${i}" class="w-20 h-20 rounded-2xl bg-white border border-slate-200 album-thumb text-3xl">📅</div>
+                <p class="text-xs font-bold text-slate-600 mt-1 truncate">${esc(p.title)}</p>
+            </button>`).join('');
+            window._quickPicks = picks;
+            picks.forEach(async (p, i) => {
+                if (!p.latest.pCloudURL) return;
+                await loadAlbumData(p.latest);
+                const data = photosData[p.latest.ID];
+                const img = data && data.photos.find(x => !x.isVideo);
+                const el = document.getElementById(`qp-${i}`);
+                if (img && el) el.innerHTML = `<img src="${thumbUrl(data.code, img.fileid, '160x160')}">`;
+            });
+        }
+
+        function applyQuickPick(i) {
+            const p = (window._quickPicks || [])[i];
+            if (!p) return;
+            document.getElementById('f-title').value = p.title;
+            document.getElementById('f-location').value = p.location;
+            setRange(p.latest.共有範囲 || '全員');
+        }
+
+        async function handleSave(e) {
+            e.preventDefault();
+            setWait(true, '保存しています...');
+            try {
+                const range = document.getElementById('f-range').value;
+                const data = {
+                    action: 'addEvent',
+                    role: ROLE,
+                    date: document.getElementById('f-date').value,
+                    title: document.getElementById('f-title').value,
+                    detail: document.getElementById('f-detail').value,
+                    location: document.getElementById('f-location').value,
+                    range
+                };
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(data) });
+                const result = await res.json();
+                if (!result.success) throw new Error(result.error || '保存に失敗しました');
+                store('famory_last_range', range);
+                closeForm();
+                openSuccessModal(result.pCloudUploadURL);
+            } catch (err) {
+                console.error('Save Error:', err);
+                alert('エラーが発生しました: ' + err.message);
+            }
+            setWait(false);
+        }
+
+        // --- 保存完了モーダル ---
         function openSuccessModal(uploadUrl) {
             const link = document.getElementById('success-upload-link');
             if (uploadUrl) {
@@ -703,393 +883,111 @@
             }
             document.getElementById('success-modal').classList.remove('hidden');
         }
-
         function closeSuccessModal() {
             document.getElementById('success-modal').classList.add('hidden');
             loadData();
         }
 
-        async function reissueUploadLink(id) {
-            setWait(true, 'アップロード用リンクを準備しています...');
-            try {
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'addPhotos', id: id })
-                });
-                const result = await res.json();
-                if (result.success && result.pCloudUploadURL) {
-                    window.open(result.pCloudUploadURL, '_blank');
-                    loadData();
-                } else {
-                    console.error('addPhotos Error:', result);
-                    alert('準備に失敗しました: ' + (result.error || '詳細なエラー情報がありません。'));
-                }
-            } catch (err) {
-                alert('通信エラーが発生しました');
-            }
-            setWait(false);
-        }
+        // --- ヘルプ・紹介 ---
+        function openHelp() { document.getElementById('help-modal').classList.remove('hidden'); }
+        function closeHelp() { document.getElementById('help-modal').classList.add('hidden'); }
+        function openInfo() { document.getElementById('info-modal').classList.remove('hidden'); }
+        function closeInfo() { document.getElementById('info-modal').classList.add('hidden'); }
 
-        // --- 共有機能 ---
-        function getAppUrl(role, date) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('role', role);
-            if (date) url.searchParams.set('date', date);
-            return url.toString();
-        }
-
-        function shareLine(title, date, uploadUrl, range) {
-            const shareUploadUrl = addExternalParam(uploadUrl);
-
-            let role = 'guest';
-            if (range === '大塚家') role = 'paternal';
-            else if (range === '石川家') role = 'maternal';
-
-            const appLink = addExternalParam(getAppUrl(role, date));
-
-            let msg = `【ファモリ】想い出の共有 ✨\n\nタイトル：${title}\n日付：${date}\n\nここに写真や動画を入れてね！📸\n\n`;
-
-            if (shareUploadUrl) {
-                msg += `① 写真・動画の【投稿】はこちら\n${shareUploadUrl}\n\n`;
-            }
-
-            msg += `② アプリで写真を見る\n${appLink}`;
-
-            const text = encodeURIComponent(msg);
-            window.open(`https://line.me/R/msg/text/?${text}`, '_blank');
-        }
-
-        // 旧式のアップロード機能は無効化、または削除可能
-        async function handleAddPhotos(e) {
-            alert('この機能は統合されました。メイン画面の「投稿する」ボタンをご利用ください。');
-        }
-
-        // --- Form Interaction ---
-        function openForm() {
-            const dateInput = document.getElementById('f-date');
-
-            // 日付の初期値を設定
-            if (selectedDate) {
-                // selectedDate (YYYY-MM-DD か Date)
-                dateInput.value = selectedDate instanceof Date ? selectedDate.toISOString().split('T')[0] : selectedDate;
-            } else {
-                dateInput.value = new Date().toISOString().split('T')[0];
-            }
-
-            document.getElementById('form-modal').classList.remove('hidden');
-        }
-
-        function closeForm() {
-            document.getElementById('form-modal').classList.add('hidden');
-            document.getElementById('event-form').reset();
-            setRange('全員');
-        }
-
-        function setRange(val) {
-            document.getElementById('f-range').value = val;
-            const ids = { '全員': 'r-all', '大塚家': 'r-paternal', '石川家': 'r-maternal' };
-            const cols = { '全員': 'border-blue-200 text-blue-500 bg-blue-50', '大塚家': 'border-red-200 text-red-500 bg-red-50', '石川家': 'border-emerald-200 text-emerald-500 bg-emerald-50' };
-
-            Object.keys(ids).forEach(k => {
-                const btn = document.getElementById(ids[k]);
-                if (k === val) btn.className = 'p-3 rounded-xl border-2 font-bold ' + cols[k];
-                else btn.className = 'p-3 rounded-xl border-2 border-slate-200 text-slate-400 font-bold';
-            });
-        }
-
-        async function handleSave(e) {
-            e.preventDefault();
-            setWait(true, '保存しています...');
-
-            try {
-                // アプリ内アップロードは廃止するため、イベント情報のみ送信
-                const data = {
-                    action: 'addEvent',
-                    role: ROLE,
-                    date: document.getElementById('f-date').value,
-                    title: document.getElementById('f-title').value,
-                    detail: document.getElementById('f-detail').value,
-                    location: document.getElementById('f-location').value,
-                    range: document.getElementById('f-range').value
-                };
-
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(data)
-                });
-                const result = await res.json();
-
-                if (!result.success) {
-                    throw new Error(result.error || '保存に失敗しました');
-                }
-
-                closeForm();
-                openSuccessModal(result.pCloudUploadURL);
-            } catch (err) {
-                console.error('Save Error:', err);
-                alert('エラーが発生しました: ' + err.message);
-            }
-            setWait(false);
-        }
-
-        // --- pCloud API (no GAS needed) ---
+        // ===== pCloud（公開リンク経由で直接読む） =====
         const _pcCache = {};
+        const photosData = {};
 
         function extractPCloudCode(url) {
             if (!url) return null;
             const m = String(url).match(/[?&]code=([^&\s]+)/);
             return m ? m[1] : null;
         }
-
-        async function getPCloudTree(code) {
-            if (_pcCache[code]) return _pcCache[code];
-            const res = await fetch(`https://api.pcloud.com/showpublink?code=${code}`);
-            const json = await res.json();
-            _pcCache[code] = json.metadata;
-            return json.metadata;
+        function thumbUrl(code, fileid, size, crop = 1) {
+            return `https://api.pcloud.com/getpubthumb?code=${code}&fileid=${fileid}&size=${size}&crop=${crop}&type=jpg`;
         }
-
+        async function getPCloudTree(code) {
+            if (!_pcCache[code]) {
+                _pcCache[code] = fetch(`https://api.pcloud.com/showpublink?code=${code}`)
+                    .then(r => r.json()).then(j => j.metadata)
+                    .catch(err => { delete _pcCache[code]; throw err; });
+            }
+            return _pcCache[code];
+        }
         function collectMedia(node) {
             const imgExt = /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i;
             const vidExt = /\.(mp4|mov|avi|m4v|webm|3gp|mkv)$/i;
             const direct = (node.contents || []).filter(f => !f.isfolder && (imgExt.test(f.name) || vidExt.test(f.name)));
             if (direct.length) return direct.map(f => ({ ...f, isVideo: vidExt.test(f.name) }));
             const sub = [];
-            for (const c of (node.contents || [])) {
-                if (c.isfolder) sub.push(...collectMedia(c));
-            }
+            for (const c of (node.contents || [])) if (c.isfolder) sub.push(...collectMedia(c));
             return sub;
         }
-
+        async function loadAlbumData(ev) {
+            const id = ev.ID;
+            if (photosData[id]) return photosData[id];
+            const code = extractPCloudCode(ev.pCloudURL);
+            if (!code) return (photosData[id] = { photos: [], code: '' });
+            try {
+                const tree = await getPCloudTree(code);
+                photosData[id] = { photos: tree ? collectMedia(tree) : [], code };
+            } catch (err) {
+                return { photos: [], code: '' }; // 失敗はキャッシュしない
+            }
+            return photosData[id];
+        }
         async function getVideoUrl(code, fileid) {
             try {
                 const res = await fetch(`https://api.pcloud.com/getpublinkdownload?code=${code}&fileid=${fileid}`);
                 const data = await res.json();
                 if (data.result !== 0 || !data.hosts || !data.path) return null;
                 return `https://${data.hosts[0]}${data.path}`;
-            } catch(e) { return null; }
+            } catch (e) { return null; }
         }
 
-        async function loadEventPhotos(code, container, title) {
-            container.innerHTML = '<span class="pcloud-loading">読み込み中…</span>';
-            try {
-                const tree = await getPCloudTree(code);
-                const imgs = collectMedia(tree);
-                if (!imgs.length) {
-                    container.innerHTML = '<span class="pcloud-loading">写真なし</span>';
-                    return;
-                }
-                container.innerHTML = imgs.map(f => {
-                    if (f.isVideo) return `<div class="pcloud-photo bg-slate-100 flex items-center justify-center text-2xl cursor-pointer" data-fid="${f.fileid}">▶️</div>`;
-                    return `<img src="${thumbUrl(code, f.fileid, '160x160')}" class="pcloud-photo" data-fid="${f.fileid}" loading="lazy">`;
-                }).join('');
-                container.querySelectorAll('.pcloud-photo').forEach((el, i) => {
-                    el.addEventListener('click', () => {
-                        lbPhotos = imgs;
-                        lbCode = code;
-                        lbIndex = i;
-                        lbTitle = title;
-                        const lb = document.getElementById('lightbox');
-                        lb.classList.add('lb-open');
-                        document.getElementById('lb-title').textContent = lbTitle;
-                        updateLb();
-                        renderStrip();
-                    });
-                });
-            } catch(e) {
-                container.innerHTML = '<span class="pcloud-loading">読み込み失敗</span>';
-            }
-        }
+        // ===== ビューア（写真・動画をその場で表示） =====
+        let lbPhotos = [], lbCode = '', lbIndex = 0, lbEvent = null;
 
-        // --- Photo View ---
-        const photosData = {};
-        let lbPhotos = [], lbCode = '', lbIndex = 0, lbTitle = '';
-
-        function thumbUrl(code, fileid, size, crop = 1) {
-            return `https://api.pcloud.com/getpubthumb?code=${code}&fileid=${fileid}&size=${size}&crop=${crop}&type=jpg`;
-        }
-
-        async function renderPhotos() {
-            const container = document.getElementById('photos-container');
-            const eventsWithMedia = allEvents.filter(e => e['pCloudURL'] || e['pCloudFolderID']);
-            if (eventsWithMedia.length === 0) {
-                container.innerHTML = '<div class="text-center py-20 text-slate-400">まだ写真がありません</div>';
+        async function openViewer(id, start = 0) {
+            const ev = evById(id);
+            if (!ev) return;
+            setWait(true);
+            const data = await loadAlbumData(ev);
+            setWait(false);
+            if (!data.photos.length) {
+                if ((ev.pCloudUploadURL || IS_ADMIN) && confirm('まだ写真がありません。写真を追加しますか？')) addPhotos(id);
                 return;
             }
-            const groups = {};
-            eventsWithMedia.forEach(e => {
-                const month = String(e['日付']).substring(0, 7);
-                if (!groups[month]) groups[month] = [];
-                groups[month].push(e);
-            });
-            const months = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-            let html = '';
-            months.forEach(month => {
-                const [y, m] = month.split('-');
-                html += `<div><div class="text-base font-bold text-slate-400 mb-3 px-1">${y}年 ${parseInt(m)}月</div><div class="grid grid-cols-2 gap-3">`;
-                groups[month].forEach(e => {
-                    const safeTitle = (e['タイトル'] || '').replace(/['"]/g, '');
-                    html += `<div onclick="openAlbum('${e['ID']}','${safeTitle}')" class="album-card glass-card p-3 cursor-pointer">
-                        <div id="at-${e['ID']}" class="album-thumb mb-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                            </svg>
-                        </div>
-                        <p class="text-sm font-bold text-slate-700 truncate">${e['タイトル'] || ''}</p>
-                        <p class="text-xs text-slate-400">${e['日付'] || ''}</p>
-                    </div>`;
-                });
-                html += '</div></div>';
-            });
-            container.innerHTML = html;
-            // バッチ5件ずつ並列ロード
-            for (let i = 0; i < eventsWithMedia.length; i += 5) {
-                await Promise.all(eventsWithMedia.slice(i, i + 5).map(e => loadAlbumData(e)));
-            }
-        }
-
-        async function loadAlbumData(event) {
-            const id = event['ID'];
-            if (photosData[id]) { applyAlbumThumb(id); return; }
-            const code = extractPCloudCode(event['pCloudURL']);
-            if (!code) { photosData[id] = { photos: [], code: '' }; applyAlbumThumb(id); return; }
-            try {
-                const tree = await getPCloudTree(code);
-                const imgs = collectMedia(tree);
-                photosData[id] = { photos: imgs, code };
-            } catch(err) {
-                photosData[id] = { photos: [], code: '' };
-            }
-            applyAlbumThumb(id);
-        }
-
-        function applyAlbumThumb(eventId) {
-            const el = document.getElementById(`at-${eventId}`);
-            if (!el) return;
-            const data = photosData[eventId];
-            if (!data || !data.code || !data.photos || data.photos.length === 0) return;
-            const imgOnly = data.photos.filter(p => !p.isVideo);
-            if (!imgOnly.length) {
-                el.innerHTML = `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-4xl">🎬</div>`;
-                return;
-            }
-            const ps = imgOnly.slice(0, 4);
-            if (ps.length >= 4) {
-                el.innerHTML = `<div class="thumb-grid">${ps.map(p => `<img src="${thumbUrl(data.code, p.fileid, '300x300')}" onerror="this.style.visibility='hidden'">`).join('')}</div>`;
-            } else {
-                el.innerHTML = `<img src="${thumbUrl(data.code, ps[0].fileid, '400x400')}" onerror="this.style.visibility='hidden'">`;
-            }
-        }
-
-        async function openPhotoPopup(eventId) {
-            const ev = allEvents.find(e => String(e.ID) === String(eventId));
-            if (!ev || !ev.pCloudURL) return;
-            const code = extractPCloudCode(ev.pCloudURL);
-            if (!code) return;
-
-            document.getElementById('photo-popup-title').textContent = ev.タイトル || '';
-            const grid = document.getElementById('photo-popup-grid');
-            grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">読み込み中…</div>';
-
-            const popup = document.getElementById('photo-popup');
-            popup.classList.remove('hidden');
-            popup.classList.add('flex');
-
-            try {
-                const tree = await getPCloudTree(code);
-                const imgs = collectMedia(tree);
-                if (!imgs.length) {
-                    grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">写真・動画がありません</div>';
-                    return;
-                }
-                grid.innerHTML = imgs.map((f, i) => {
-                    if (f.isVideo) {
-                        return `<div class="w-full aspect-square bg-slate-100 rounded-xl flex flex-col items-center justify-center cursor-pointer active:opacity-70 gap-1" data-idx="${i}">
-                            <span class="text-3xl">▶️</span>
-                            <span class="text-xs text-slate-500 truncate w-full text-center px-1">${f.name}</span>
-                        </div>`;
-                    }
-                    return `<img src="${thumbUrl(code, f.fileid, '300x300')}" class="w-full aspect-square object-cover rounded-xl cursor-pointer active:opacity-70 transition-opacity" data-idx="${i}" loading="lazy">`;
-                }).join('');
-                grid.querySelectorAll('[data-idx]').forEach((el, i) => {
-                    el.addEventListener('click', async () => {
-                        const item = imgs[i];
-                        if (item.isVideo) {
-                            // ポップアップブロック回避：先に空タブを開いてからURLを設定
-                            const win = window.open('', '_blank');
-                            el.style.opacity = '0.5';
-                            const url = await getVideoUrl(code, item.fileid);
-                            el.style.opacity = '';
-                            if (url && win) {
-                                win.location.href = url;
-                            } else {
-                                if (win) win.close();
-                                window.open(ev.pCloudURL, '_blank'); // fallback
-                            }
-                            return;
-                        }
-                        lbPhotos = imgs;
-                        lbCode = code;
-                        lbIndex = i;
-                        lbTitle = ev.タイトル || '';
-                        const lb = document.getElementById('lightbox');
-                        lb.classList.add('lb-open');
-                        document.getElementById('lb-title').textContent = lbTitle;
-                        updateLb();
-                        renderStrip();
-                    });
-                });
-            } catch(err) {
-                grid.innerHTML = '<div class="col-span-3 text-center py-10 text-slate-400">読み込み失敗</div>';
-            }
-        }
-
-        function closePhotoPopup() {
-            const popup = document.getElementById('photo-popup');
-            popup.classList.add('hidden');
-            popup.classList.remove('flex');
-        }
-
-        function openAlbum(eventId, title) {
-            const data = photosData[eventId];
-            if (!data || !data.code || !data.photos || data.photos.length === 0) {
-                const ev = allEvents.find(e => e['ID'] === eventId);
-                if (ev && ev['pCloudURL']) window.open(addExternalParam(ev['pCloudURL']), '_blank');
-                return;
-            }
-            lbPhotos = data.photos; lbCode = data.code; lbIndex = 0; lbTitle = title;
-            const lb = document.getElementById('lightbox');
-            lb.classList.add('lb-open');
-            document.getElementById('lb-title').textContent = lbTitle;
-            updateLb();
+            lbPhotos = data.photos; lbCode = data.code; lbIndex = start; lbEvent = ev;
+            document.getElementById('lb-title').textContent = ev.タイトル || '';
+            document.getElementById('lightbox').classList.add('lb-open');
             renderStrip();
+            updateLb();
         }
 
         async function updateLb() {
             const p = lbPhotos[lbIndex];
             const img = document.getElementById('lb-img');
             const vid = document.getElementById('lb-video');
+            const msg = document.getElementById('lb-video-msg');
+            vid.pause();
+            vid.removeAttribute('src');
+            msg.classList.add('hidden'); msg.classList.remove('flex');
             if (p.isVideo) {
                 img.style.display = 'none';
-                vid.style.display = 'none';
-                vid.src = '';
-                // 動画は新タブで開くボタンを表示
-                let openBtn = document.getElementById('lb-video-btn');
-                if (!openBtn) {
-                    openBtn = document.createElement('div');
-                    openBtn.id = 'lb-video-btn';
-                    openBtn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:12px;';
-                    document.getElementById('lb-stage').appendChild(openBtn);
+                vid.style.display = 'block';
+                vid.poster = thumbUrl(lbCode, p.fileid, '640x640', 0);
+                const myIndex = lbIndex;
+                const url = await getVideoUrl(lbCode, p.fileid);
+                if (myIndex !== lbIndex) return; // 読み込み中に別の写真へ移動した
+                if (url) {
+                    vid.src = url;
+                } else {
+                    vid.style.display = 'none';
+                    msg.classList.remove('hidden'); msg.classList.add('flex');
+                    document.getElementById('lb-video-open').onclick = () => window.open(addExternalParam(lbEvent.pCloudURL), '_blank');
                 }
-                openBtn.style.display = 'flex';
-                openBtn.innerHTML = `<span style="font-size:64px">🎬</span>
-                    <span style="color:white;font-size:14px;opacity:0.7">${p.name}</span>
-                    <button onclick="openVideoNewTab('${lbCode}','${p.fileid}')" style="margin-top:8px;background:white;color:#1e293b;font-weight:bold;padding:12px 28px;border-radius:999px;border:none;font-size:15px;cursor:pointer;">▶ 動画を開く</button>`;
             } else {
-                const openBtn = document.getElementById('lb-video-btn');
-                if (openBtn) openBtn.style.display = 'none';
-                vid.pause();
-                vid.src = '';
                 vid.style.display = 'none';
                 img.style.display = 'block';
                 img.src = thumbUrl(lbCode, p.fileid, '1920x1920', 0);
@@ -1099,26 +997,15 @@
                 s.style.opacity = i === lbIndex ? '1' : '0.45';
                 s.style.outline = i === lbIndex ? '2px solid white' : 'none';
                 s.style.outlineOffset = '2px';
+                if (i === lbIndex) s.scrollIntoView({ block: 'nearest', inline: 'center' });
             });
         }
 
-        async function openVideoNewTab(code, fileid) {
-            const win = window.open('', '_blank');
-            const url = await getVideoUrl(code, fileid);
-            if (url && win) {
-                win.location.href = url;
-            } else {
-                if (win) win.close();
-            }
-        }
-
         function renderStrip() {
-            document.getElementById('lb-strip').innerHTML = lbPhotos.map((p, i) => {
-                if (p.isVideo) {
-                    return `<div class="lb-s flex-shrink-0 h-14 w-14 bg-slate-700 rounded-lg cursor-pointer flex items-center justify-center text-white text-xl" style="opacity:${i===0?'1':'0.45'}" onclick="lbJump(${i})">▶</div>`;
-                }
-                return `<img src="${thumbUrl(lbCode, p.fileid, '120x120')}" class="lb-s flex-shrink-0 h-14 w-14 object-cover rounded-lg cursor-pointer" style="opacity:${i===0?'1':'0.45'}" onclick="lbJump(${i})">`;
-            }).join('');
+            document.getElementById('lb-strip').innerHTML = lbPhotos.map((p, i) => p.isVideo
+                ? `<div class="lb-s flex-shrink-0 h-14 w-14 bg-slate-700 rounded-lg cursor-pointer flex items-center justify-center text-white text-xl" onclick="lbJump(${i})">▶</div>`
+                : `<img src="${thumbUrl(lbCode, p.fileid, '120x120')}" class="lb-s flex-shrink-0 h-14 w-14 object-cover rounded-lg cursor-pointer" onclick="lbJump(${i})">`
+            ).join('');
         }
 
         function lbJump(i) { lbIndex = i; updateLb(); }
@@ -1128,46 +1015,27 @@
             document.getElementById('lightbox').classList.remove('lb-open');
             const vid = document.getElementById('lb-video');
             vid.pause();
-            vid.src = '';
+            vid.removeAttribute('src');
             lbPhotos = [];
         }
 
-        // スワイプ対応
-        let _lbTx = null;
-        window.addEventListener('load', () => {
+        function setupSwipe() {
+            let tx = null;
             const stage = document.getElementById('lb-stage');
-            if (!stage) return;
-            stage.addEventListener('touchstart', e => { _lbTx = e.touches[0].clientX; }, { passive: true });
+            stage.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
             stage.addEventListener('touchend', e => {
-                if (_lbTx === null) return;
-                const dx = e.changedTouches[0].clientX - _lbTx;
+                if (tx === null) return;
+                const dx = e.changedTouches[0].clientX - tx;
                 if (Math.abs(dx) > 50) { dx < 0 ? lbNext() : lbPrev(); }
-                _lbTx = null;
+                tx = null;
             }, { passive: true });
-        });
+        }
         document.addEventListener('keydown', e => {
             if (!document.getElementById('lightbox').classList.contains('lb-open')) return;
             if (e.key === 'ArrowLeft') lbPrev();
             else if (e.key === 'ArrowRight') lbNext();
             else if (e.key === 'Escape') closeLightbox();
         });
-
-        async function handleDelete(id) {
-            if (!confirm('このイベントを削除しますか？')) return;
-            setWait(true, '削除しています...');
-            try {
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'deleteEvent', id: id, role: ROLE })
-                });
-                const result = await res.json();
-                if (result.success) loadData();
-                else alert('削除に失敗しました: ' + result.error);
-            } catch (err) {
-                alert('通信エラーが発生しました');
-            }
-            setWait(false);
-        }
     </script>
 </body>
 
