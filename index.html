@@ -442,7 +442,7 @@
             document.getElementById('info-modal').classList.add('hidden');
         }
         // --- 設定エリア ---
-        const API_URL = 'https://script.google.com/macros/s/AKfycbzrgN6mlc6YKTdxeNLAtzDcMYm0aVoET9-XABPqFkXNVLwc0oBDKyf0AjthAA-EnK9C7A/exec';
+        const API_URL = 'https://uyzngbjkwbvouxmowfhu.supabase.co/functions/v1/famory-api';
 
         const params = new URLSearchParams(window.location.search);
         const ROLE = (params.get('role') || 'guest').toLowerCase();
@@ -502,7 +502,7 @@
                 }
             } catch (err) {
                 console.error('通信エラー:', err);
-                alert('通信に失敗しました。以前の指示に従って、GASのデプロイ設定（アクセス：全員）が正しく行われているか、またはWebアプリURLが正しいか確認してください。\n\n' +
+                alert('通信に失敗しました。時間をおいて再度お試しください。\n\n' +
                     '【現在の設定URL】: ' + API_URL + '\n' +
                     '【エラー内容】: ' + err.message);
             }
@@ -722,7 +722,7 @@
                     loadData();
                 } else {
                     console.error('addPhotos Error:', result);
-                    alert('準備に失敗しました: ' + (result.error || '詳細なエラー情報がありません。GASのログを確認してください。'));
+                    alert('準備に失敗しました: ' + (result.error || '詳細なエラー情報がありません。'));
                 }
             } catch (err) {
                 alert('通信エラーが発生しました');
